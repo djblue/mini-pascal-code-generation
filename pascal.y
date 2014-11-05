@@ -5,8 +5,16 @@
   var symbols = {};
   var classes = {};
 
+  var getOffset = function () {
+    mips.comment('getting offset for ' + currentType.name + '.'+ currentId);
+    var cl = classes[currentType.name];
+    return cl.variables[currentId].offset
+  };
+
   var currentClass = null;
   var currentFunction = null;
+  var currentType = null;
+  var currentId = null;
 
   // registers
   var $zero = '$0'
@@ -67,7 +75,6 @@
   // release register
   var release = function (reg) {
     if (reg !== $v0) {
-      //console.log(reg)
       regCount--;
     }
   };
@@ -167,7 +174,8 @@ class_list:
       name: $2.name,
       extends: $2.extends,
       variables: $4.variables,
-      functions: $4.functions
+      functions: $4.functions,
+      size: $4.size
     };
 
     $$ = $1;
@@ -178,7 +186,8 @@ class_list:
       name: $1.name,
       extends: $1.extends,
       variables: $3.variables,
-      functions: $3.functions
+      functions: $3.functions,
+      size: $3.size
     };
   }
 ;
@@ -196,13 +205,22 @@ class_identification:
 
 class_block:
   variable_declaration_part func_declaration_list {
-    $$ = { variables: $1, functions: $2 };
+    var variables = {};
+    var offset = 0;
+    $1.forEach(function (declaration) {
+      declaration.identifiers.forEach(function (id) {
+        variables[id] = declaration.denoter;
+        variables[id].offset = offset;
+        offset += declaration.denoter.size;
+      })
+    });
     $2.forEach(function (func) {
       mips.label(func.heading.label);
       mips.nest(func.block.statements.instructions);
       mips.jr();
       console.log('\n' + mips.clear().join('\n'));
     });
+    $$ = { variables: variables, size: offset, functions: $2 };
   }
 ;
 
@@ -210,19 +228,22 @@ type_denoter:
   array_type {
     $$ = {
       type: 'array',
-      denoter: $1
+      denoter: $1,
+      size: $1.size
     };
   }
 | identifier {
     if ($1 === 'integer' || $1 === 'boolean') {
       $$ = {
         type: 'primitive',
-        name: $1
+        name: $1,
+        size: 4
       };
     } else {
       $$ = {
         type: 'class',
-        name: $1
+        name: $1,
+        size: classes[$1].size
       };
     }
   }
@@ -232,7 +253,8 @@ array_type:
   ARRAY LBRAC range RBRAC OF type_denoter {
     $$ = {
       range: $3,
-      denoter: $6
+      denoter: $6,
+      size: $6.size * ($3.upper - $3.lower)
     };
   }
 ;
@@ -273,7 +295,11 @@ variable_declaration_list:
 
 variable_declaration:
   identifier_list COLON type_denoter {
-    $$ = { identifiers: $1, denoter: $3 };
+    $$ = {
+      identifiers: $1,
+      denoter: $3,
+      size: $1.length * $3.size
+    };
   }
 ;
 
@@ -424,16 +450,27 @@ assignment_statement:
     } else {
       mips.sw($3 , $1);
     }
-    release($1); // for variable_access
-    release($3); // for expression evaluation
     $$ = {
       type: 'assign',
       instructions: mips.clear()
     };
+    release($1); // for variable_access
+    release($3); // for expression evaluation
   }
 | variable_access ASSIGNMENT object_instantiation {
+    var size = classes[$3.name].size;
+    // allocate memory on the heap
+    mips.comment('allocating memory for ' + $3.name);
+    mips.comment('sizeof(' + $3.name + ') = ' + size);
+    mips.addi($v0, $zero, 9);
+    mips.addi($a0, $zero, size); // how many btyes to allocate
+    mips.syscall();
+    mips.sw($v0, $1);
+    $$ = {
+      type: 'instantiation',
+      instructions: mips.clear()
+    };
     release($1); // for variable_access
-    release($3); // for object address
   }
 ;
 
@@ -478,8 +515,16 @@ if_statement:
 
 object_instantiation:
   NEW identifier {
+    $$ = {
+      name: $2,
+      params: []
+    };
   }
 | NEW identifier params {
+    $$ = {
+      name: $2,
+      params: $3
+    };
   }
 ;
 
@@ -502,6 +547,7 @@ print_statement:
 
 variable_access:
   identifier {
+    currentType = symbols[$1];
     // trying to assign to a function name
     if (symbols[$1].result === true) {
       $$ = $v0;
@@ -539,6 +585,8 @@ index_expression:
 
 attribute_designator:
   variable_access DOT identifier {
+    var offset = getOffset($1); 
+    mips.addi($1, $1, offset);
   }
 ;
 
@@ -721,5 +769,6 @@ relop: EQUAL | NOTEQUAL | LT | GT | LE | GE;
 identifier:
   IDENTIFIER {
     $$ = $1.toLowerCase();
+    currentId = $$;
   }
 ;
