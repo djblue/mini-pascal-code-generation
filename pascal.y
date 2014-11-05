@@ -219,6 +219,7 @@ class_block:
       mips.nest(func.block.statements.instructions);
       mips.jr();
       console.log('\n' + mips.clear().join('\n'));
+      //console.log(symbols);
     });
     $$ = { variables: variables, size: offset, functions: $2 };
   }
@@ -275,7 +276,7 @@ variable_declaration_part:
       declaration.identifiers.forEach(function (id) {
         symbols[id] = _.clone(declaration.denoter);
         symbols[id].offset = offset;
-        offset += 4;
+        offset += symbols[id].size;
       });
     });
     $$ = variables;
@@ -570,11 +571,16 @@ variable_access:
 
 indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
-    var unit = currentType.unit;
+    var type = symbols[$1.symbol];
+    var unit = type.unit;
+    var lower = type.denoter.range.lower;
+    var upper = type.denoter.range.upper;
     var $i = $t();
-    //console.log(currentType)
-    mips.comment('a[$i] ' + unit + ' * $i');
+    mips.comment($1.symbol + '[' + lower + '..' + upper + '] = ' + unit + ' * $i');
     mips.addi($i, $zero, unit);
+    if (lower !== 0) {
+      //mips.subi($3, $3, lower);
+    }
     mips.mult($i, $3);
     mips.mflo($i);
     mips.add($1.register, $1.register, $i);
