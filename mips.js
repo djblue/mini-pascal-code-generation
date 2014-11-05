@@ -52,14 +52,14 @@ exports.sw = function ($t, $s, i) {
   if (i === undefined) {
     i = 0;
   }
-  add('sw ' + $t + ' ' + i + '(' + $s + ')'); // MEM [$s + i]:4 = $t
+  add('sw ' + $t + ', ' + i + '(' + $s + ')'); // MEM [$s + i]:4 = $t
 };
 
 exports.lw = function ($t, $s, i) {
   if (i === undefined) {
     i = 0;
   }
-  add('lw ' + $t + ' ' + i + '(' + $s + ')'); // MEM [$s + i]:4 = $t
+  add('lw ' + $t + ', ' + i + '(' + $s + ')'); // MEM [$s + i]:4 = $t
 };
 
 // Data Movement Instructions
@@ -102,6 +102,14 @@ exports.beq = function ($s, $t, label) {
 
 exports.j = function (label) {
   add('j ' + label);
+};
+
+exports.jal = function (label) {
+  add('jal ' + label);
+};
+
+exports.jr = function () {
+  add('jr $ra');
 };
 
 exports.nest = function (instructions) {

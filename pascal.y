@@ -15,6 +15,7 @@
     , $sp = '$sp'
     , $a0 = '$a0'
     , $v0 = '$v0'
+    , $ra = '$ra'
     ;
 
   var whileCount = 0;
@@ -32,10 +33,45 @@
   var $t = function () {
     return '$t' + regCount++;
   };
+
+  // backup registers to stack
+  var regBackup = function () {
+    // allocate space on the stack (+1 for $ra)
+    mips.addi($sp, $sp, -4 * (regCount + 1));
+    // backup temps
+    for (var i = 0; i < regCount; i++) {
+      mips.sw('$t'+i, $sp, i*4);
+    }
+    // backup $ra
+    mips.sw($ra, $sp, i*4);
+
+    regCount = 0;
+
+    // unload stack back into registers
+    return function () {
+
+      regCount = i;
+
+      mips.lw($ra, $sp, i*4);
+      i--;
+      for (; i >= 0; i--) {
+        mips.lw('$t'+i, $sp, i*4);
+      }
+
+      // git back stack
+      mips.addi($sp, $sp, 4 * (regCount + 1));
+    };
+  };
   // release register
   var release = function () {
     regCount--;
   };
+
+  console.log('.text');
+  console.log('main:');
+  console.log('jal main_main');
+  console.log('addi $v0, $zero, 10');
+  console.log('syscall');
 
 %}
 
@@ -156,6 +192,12 @@ class_identification:
 class_block:
   variable_declaration_part func_declaration_list {
     $$ = { variables: $1, functions: $2 };
+    $2.forEach(function (func) {
+      mips.label(func.heading.label);
+      mips.nest(func.block.statements.instructions);
+      mips.jr();
+      console.log('\n' + mips.clear().join('\n'));
+    });
   }
 ;
 
@@ -273,8 +315,16 @@ variable_parameter_specification:
 
 function_declaration:
   function_identification SEMICOLON function_block {
+    $$ = {
+      heading: $1,
+      block: $3
+    };
   }
 | function_heading SEMICOLON function_block {
+    $$ = {
+      heading: $1,
+      block: $3
+    };
   }
 ;
 
@@ -285,9 +335,10 @@ function_heading:
     currentFunction = {
       name: $2,
       label: label,
-      result: $5
+      result: $4
     };
     $$ = currentFunction;
+    symbols[$2] = { result: true };
   }
 | FUNCTION identifier formal_parameter_list COLON result_type {
     var label = currentClass.name + '_' + $2;
@@ -316,14 +367,18 @@ function_identification:
   }
 ;
 
-function_block: variable_declaration_part statement_part;
+function_block:
+  variable_declaration_part statement_part {
+    $$ = {
+      type: 'block',
+      variables: $1,
+      statements: $2
+    };
+  }
+;
 
 statement_part:
   compound_statement {
-    console.log('main:');
-    console.log($1.instructions.join('\n'));
-    console.log('addi $v0, $zero, 10');
-    console.log('syscall');
   }
 ;
 
@@ -359,14 +414,18 @@ statement:
 assignment_statement:
   variable_access ASSIGNMENT expression {
     mips.comment('assign expression');
-    mips.sw($3 , $1);
+    if ($1 === $v0) {
+      mips.mov($v0, $3);
+    } else {
+      mips.sw($3 , $1);
+      // not returning from a function
+      release(); // for variable_access
+      release(); // for expression evaluation
+    }
     $$ = {
       type: 'assign',
       instructions: mips.clear()
     };
-    // I can now release both registers.
-    release(); // for variable_access
-    release(); // for expression evaluation
   }
 | variable_access ASSIGNMENT object_instantiation {
 
@@ -440,10 +499,15 @@ print_statement:
 
 variable_access:
   identifier {
-    var reg = $t();
-    mips.comment(reg + ' <- addr(' + $1 + ')');
-    mips.addi(reg, $sp, symbols[$1].offset);
-    $$ = reg;
+    // trying to assign to a function name
+    if (symbols[$1].result === true) {
+      $$ = $v0;
+    } else {
+      var reg = $t();
+      mips.comment(reg + ' <- addr(' + $1 + ')');
+      mips.addi(reg, $sp, symbols[$1].offset);
+      $$ = reg;
+    }
   }
 | indexed_variable {
   }
@@ -482,13 +546,20 @@ method_designator:
 
 params:
   LPAREN actual_parameter_list RPAREN {
+    $$ = $2;
   }
 ;
 
 actual_parameter_list:
   actual_parameter_list COMMA actual_parameter{
+    $$ = $1.concat($3);
   }
 | actual_parameter {
+    $$ = [$1];
+  }
+|
+  {
+    $$ = [];
   }
 ;
 
@@ -603,10 +674,18 @@ primary:
   }
 | unsigned_constant {
   }
-| function_designator {
-  }
 | LPAREN expression RPAREN {
     $$ = $2;
+  }
+| function_designator {
+    // back up registers
+    var undo = regBackup();
+    // set parameters
+    // make call
+    mips.jal(currentClass.name + '_' + $1.name);
+    // fix stack frame
+    undo();
+    $$ = $v0;
   }
 | NOT primary {
   }
@@ -625,6 +704,10 @@ unsigned_integer: DIGSEQ;
 
 function_designator:
   identifier params {
+    $$ = {
+      name: $1,
+      params: $2
+    };
   }
 ;
 
