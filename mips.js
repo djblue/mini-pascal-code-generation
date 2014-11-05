@@ -113,7 +113,7 @@ exports.jr = function () {
 };
 
 exports.nest = function (instructions) {
-  buffer = buffer.concat(instructions.map(function (instruction) {
+  buffer = buffer.concat('', instructions.map(function (instruction) {
     return '    ' + instruction;
-  }));
+  }), '');
 };

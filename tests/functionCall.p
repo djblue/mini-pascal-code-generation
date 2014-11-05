@@ -9,7 +9,11 @@ begin
   end;
   function main;
   begin
+    aa := 1;
+    print aa;
     aa := go();
+    print aa;
+    aa := aa + go() + 10;
     print aa
   end
 end

@@ -30,9 +30,11 @@
 
   var regCount = 0;
   // get next temporary register available
-  var $t = function () {
-    return '$t' + regCount++;
-  };
+  var $t = (function () {
+    return function () {
+      return '$t' + regCount++;
+    };
+  })();
 
   // backup registers to stack
   var regBackup = function () {
@@ -63,8 +65,11 @@
     };
   };
   // release register
-  var release = function () {
-    regCount--;
+  var release = function (reg) {
+    if (reg !== $v0) {
+      //console.log(reg)
+      regCount--;
+    }
   };
 
   console.log('.text');
@@ -418,25 +423,23 @@ assignment_statement:
       mips.mov($v0, $3);
     } else {
       mips.sw($3 , $1);
-      // not returning from a function
-      release(); // for variable_access
-      release(); // for expression evaluation
     }
+    release($1); // for variable_access
+    release($3); // for expression evaluation
     $$ = {
       type: 'assign',
       instructions: mips.clear()
     };
   }
 | variable_access ASSIGNMENT object_instantiation {
-
-    release(); // for variable_access
-    release(); // for object address
+    release($1); // for variable_access
+    release($3); // for object address
   }
 ;
 
 while_statement:
   WHILE boolean_expression DO statement {
-    mips.comment('f expression');
+    mips.comment('while expression');
     var begin = $wh();
     var end = $wh();
     mips.label(begin);
@@ -449,7 +452,7 @@ while_statement:
       type: 'while',
       instructions: mips.clear()
     };
-    release(); // release register for condition
+    release($2.register); // release register for condition
   }
 ;
 
@@ -466,10 +469,10 @@ if_statement:
     mips.nest($6.instructions);
     mips.label(end);
     $$ = {
-      type: 'while',
+      type: 'if',
       instructions: mips.clear()
     };
-    release(); // release register for condition
+    release($2.register); // release register for condition
   }
 ;
 
@@ -493,7 +496,7 @@ print_statement:
       type: 'print',
       instructions: mips.clear()
     };
-    release(); // for variable access
+    release($2); // for variable access
   }
 ;
 
@@ -609,7 +612,7 @@ expression: simple_expression
         break;
     }
     $$ = $1;
-    release();
+    release($3);
   }
 ;
 
@@ -627,7 +630,7 @@ simple_expression: term
         break;
     }
     $$ = $1;
-    release();
+    release($3);
   }
 ;
 
@@ -651,7 +654,7 @@ term: factor
         break;
     }
     $$ = $1;
-    release();
+    release($3);
   }
 ;
 
