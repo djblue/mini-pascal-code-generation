@@ -579,7 +579,7 @@ indexed_variable:
     mips.comment($1.symbol + '[' + lower + '..' + upper + '] = ' + unit + ' * $i');
     mips.addi($i, $zero, unit);
     if (lower !== 0) {
-      //mips.subi($3, $3, lower);
+      mips.addi($3, $3, -1*lower);
     }
     mips.mult($i, $3);
     mips.mflo($i);

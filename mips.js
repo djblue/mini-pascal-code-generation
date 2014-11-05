@@ -31,6 +31,7 @@ exports.or = arith('or');     // $d = $s | $t
 exports.div = arith('div');   // lo = $s / $t; hi = $s % $t
 exports.mult = arith('mult'); // hi:lo = $s * $t
 exports.sub = arith('sub');   // $d = $s - $t
+// subi works in mars, but not spim
 exports.subi = arith('subi'); // $d = $s - SE(i)
 
 // Comparison Instructions
