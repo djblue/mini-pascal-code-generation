@@ -229,6 +229,7 @@ type_denoter:
     $$ = {
       type: 'array',
       denoter: $1,
+      unit: $1.denoter.size,
       size: $1.size
     };
   }
@@ -254,7 +255,8 @@ array_type:
     $$ = {
       range: $3,
       denoter: $6,
-      size: $6.size * ($3.upper - $3.lower)
+      // +1 because of zero based indexing
+      size: $6.size * ($3.upper - $3.lower + 1)
     };
   }
 ;
@@ -568,6 +570,15 @@ variable_access:
 
 indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
+    var unit = currentType.unit;
+    var $i = $t();
+    // a[$i] unit * $i
+    mips.addi($i,$zero, unit);
+    mips.mult($i, $3);
+    mips.mflo($i);
+    mips.add($1, $1, $i);
+    release($i);
+    release($3);
   }
 ;
 
