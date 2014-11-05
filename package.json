@@ -1,0 +1,35 @@
+{
+  "name": "mini-pascal",
+  "version": "1.0.0",
+  "description": "A mini-pascal code generator.",
+  "scripts": {
+    "install": "jison pascal.y",
+    "test": "./runner.sh"
+  },
+  "main": "pascal.js",
+  "directories": {
+    "test": "tests"
+  },
+  "dependencies": {
+    "jison": "^0.4.15",
+    "underscore": "^1.7.0"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/djblue/mini-pascal"
+  },
+  "keywords": [
+    "mini",
+    "pascal",
+    "code",
+    "generation"
+  ],
+  "readme": "README.md",
+  "author": "us",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/djblue/mini-pascal/issues"
+  },
+  "homepage": "https://github.com/djblue/mini-pascal"
+}
