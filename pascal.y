@@ -263,7 +263,7 @@ array_type:
 
 range:
   unsigned_integer DOTDOT unsigned_integer {
-    $$ = { lower: $1, upper: $3 };
+    $$ = { lower: Number($1), upper: Number($3) };
   }
 ;
 
@@ -447,16 +447,16 @@ statement:
 assignment_statement:
   variable_access ASSIGNMENT expression {
     mips.comment('assign expression');
-    if ($1 === $v0) {
+    if ($1.register === $v0) {
       mips.mov($v0, $3);
     } else {
-      mips.sw($3 , $1);
+      mips.sw($3 , $1.register);
     }
     $$ = {
       type: 'assign',
       instructions: mips.clear()
     };
-    release($1); // for variable_access
+    release($1.register); // for variable_access
     release($3); // for expression evaluation
   }
 | variable_access ASSIGNMENT object_instantiation {
@@ -467,12 +467,12 @@ assignment_statement:
     mips.addi($v0, $zero, 9);
     mips.addi($a0, $zero, size); // how many btyes to allocate
     mips.syscall();
-    mips.sw($v0, $1);
+    mips.sw($v0, $1.register);
     $$ = {
       type: 'instantiation',
       instructions: mips.clear()
     };
-    release($1); // for variable_access
+    release($1.register); // for variable_access
   }
 ;
 
@@ -534,7 +534,7 @@ print_statement:
   PRINT variable_access {
     mips.comment('printing');
     mips.addi($v0, $zero, 1);
-    mips.lw($a0, $2);
+    mips.lw($a0, $2.register);
     mips.syscall();
     mips.addi($a0, $zero, '0xA');
     mips.addi($v0, $zero, '0xB');
@@ -543,7 +543,7 @@ print_statement:
       type: 'print',
       instructions: mips.clear()
     };
-    release($2); // for variable access
+    release($2.register); // for variable access
   }
 ;
 
@@ -552,12 +552,12 @@ variable_access:
     currentType = symbols[$1];
     // trying to assign to a function name
     if (symbols[$1].result === true) {
-      $$ = $v0;
+      $$ = { register: $v0 };
     } else {
       var reg = $t();
       mips.comment(reg + ' <- addr(' + $1 + ')');
       mips.addi(reg, $sp, symbols[$1].offset);
-      $$ = reg;
+      $$ = { register: reg, symbol: $1 };
     }
   }
 | indexed_variable {
@@ -572,11 +572,13 @@ indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
     var unit = currentType.unit;
     var $i = $t();
-    // a[$i] unit * $i
-    mips.addi($i,$zero, unit);
+    //console.log(currentType)
+    mips.comment('a[$i] ' + unit + ' * $i');
+    mips.addi($i, $zero, unit);
     mips.mult($i, $3);
     mips.mflo($i);
-    mips.add($1, $1, $i);
+    mips.add($1.register, $1.register, $i);
+    // release registers
     release($i);
     release($3);
   }
@@ -597,7 +599,7 @@ index_expression:
 attribute_designator:
   variable_access DOT identifier {
     var offset = getOffset($1); 
-    mips.addi($1, $1, offset);
+    mips.addi($1.register, $1.register, offset);
   }
 ;
 
@@ -731,8 +733,8 @@ factor:
 
 primary:
   variable_access {
-    mips.lw($1, $1);
-    $$ = $1;
+    mips.lw($1.register, $1.register);
+    $$ = $1.register;
   }
 | unsigned_constant {
   }
