@@ -12,7 +12,9 @@ begin
   begin
     bb := new beep;
     bb.xx := 56;
-    print bb.xx
+    print bb.xx;
+    bb.yy := 24;
+    print bb.yy
   end
 end
 .
