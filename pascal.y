@@ -2,7 +2,26 @@
   var mips = require('./mips');
   var _ = require('underscore');
 
+  var currentClass = null;
+  var currentFunction = null;
+  var currentType = null;
+  var currentId = null;
+
   var symbols = {};
+
+  var symbolOffset = 0;
+  var addSymbol = function (name, denoter) {
+    //console.log(currentFunction);
+    //console.log(currentClass.name);
+    symbols[name] = _.clone(denoter);
+    symbols[name].offset = symbolOffset;
+    // a denoter should always have a size
+    symbolOffset += denoter.size;
+  };
+  var findSymbol = function (name) {
+    return symbols[name]
+  };
+
   var classes = {};
 
   var getOffset = function () {
@@ -10,11 +29,6 @@
     var cl = classes[currentType.name];
     return cl.variables[currentId].offset
   };
-
-  var currentClass = null;
-  var currentFunction = null;
-  var currentType = null;
-  var currentId = null;
 
   // registers
   var $zero = '$0'
@@ -72,6 +86,7 @@
       mips.addi($sp, $sp, 4 * (regCount + 1));
     };
   };
+
   // release register
   var release = function (reg) {
     if (reg !== $v0) {
@@ -219,7 +234,6 @@ class_block:
       mips.nest(func.block.statements.instructions);
       mips.jr();
       console.log('\n' + mips.clear().join('\n'));
-      //console.log(symbols);
     });
     $$ = { variables: variables, size: offset, functions: $2 };
   }
@@ -270,30 +284,21 @@ range:
 
 variable_declaration_part:
   VAR variable_declaration_list SEMICOLON {
-    var variables = $2;
-    var offset = 0;
-    variables.forEach(function (declaration) {
+    $2.forEach(function (declaration) {
       declaration.identifiers.forEach(function (id) {
-        symbols[id] = _.clone(declaration.denoter);
-        symbols[id].offset = offset;
-        offset += symbols[id].size;
+        addSymbol(id, declaration.denoter);
       });
     });
-    $$ = variables;
+    $$ = $2
   }
-|
-  {
-    $$ = [];
-  }
+| { $$ = []; }
 ;
 
 variable_declaration_list:
   variable_declaration_list SEMICOLON variable_declaration {
     $$ = $1.concat($3);
   }
-| variable_declaration {
-    $$ = [$1];
-  }
+| variable_declaration { $$ = [$1]; }
 ;
 
 variable_declaration:
@@ -310,24 +315,21 @@ func_declaration_list:
   func_declaration_list SEMICOLON function_declaration {
     $$ = $1.concat($3);
   }
-| function_declaration {
-    $$ = [$1]; 
-  }
-| {
-    $$ = [];
-  }
+| function_declaration { $$ = [$1]; }
+| { $$ = []; }
 ;
 
 formal_parameter_list:
   LPAREN formal_parameter_section_list RPAREN {
+    $$ = $1;
   }
 ;
 
 formal_parameter_section_list:
   formal_parameter_section_list SEMICOLON formal_parameter_section {
+    $$ = $1.concat($3);
   }
-| formal_parameter_section {
-  }
+| formal_parameter_section { $$ = [$1]; }
 ;
 
 formal_parameter_section:
@@ -344,6 +346,12 @@ value_parameter_specification:
 
 variable_parameter_specification:
   VAR identifier_list COLON identifier {
+    $$ = {
+      identifiers: $2,
+      denoter: {
+        name: $4
+      }
+    };
   }
 ;
 
@@ -372,7 +380,7 @@ function_heading:
       result: $4
     };
     $$ = currentFunction;
-    symbols[$2] = { result: true };
+    addSymbol($2, { result: true, type: 'return' });
   }
 | FUNCTION identifier formal_parameter_list COLON result_type {
     var label = currentClass.name + '_' + $2;
@@ -384,6 +392,7 @@ function_heading:
       result: $5
     };
     $$ = currentFunction;
+    addSymbol($2, { result: true, type: 'return' });
   }
 ;
 
@@ -550,14 +559,14 @@ print_statement:
 
 variable_access:
   identifier {
-    currentType = symbols[$1];
+    currentType = findSymbol($1);
     // trying to assign to a function name
-    if (symbols[$1].result === true) {
+    if (findSymbol($1).result === true) {
       $$ = { register: $v0 };
     } else {
       var reg = $t();
       mips.comment(reg + ' <- addr(' + $1 + ')');
-      mips.addi(reg, $sp, symbols[$1].offset);
+      mips.addi(reg, $sp, findSymbol($1).offset);
       $$ = { register: reg, symbol: $1 };
     }
   }
@@ -571,7 +580,7 @@ variable_access:
 
 indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
-    var type = symbols[$1.symbol];
+    var type = findSymbol($1.symbol);
     var unit = type.unit;
     var lower = type.denoter.range.lower;
     var upper = type.denoter.range.upper;
