@@ -2,6 +2,7 @@
   var mips = require('./mips');
   var _ = require('underscore');
 
+  // context variables
   var currentClass = null;
   var currentFunction = null;
   var currentType = null;
@@ -10,16 +11,48 @@
   var symbols = {};
 
   var symbolOffset = 0;
+
+  // add symbol to the current context
   var addSymbol = function (name, denoter) {
+    var cl = currentClass.name;
+    if (symbols[cl] === undefined) {
+      symbols[cl] = {
+        _offset: 0
+      };
+    }
     //console.log(currentFunction);
     //console.log(currentClass.name);
-    symbols[name] = _.clone(denoter);
-    symbols[name].offset = symbolOffset;
-    // a denoter should always have a size
-    symbolOffset += denoter.size;
+    if (currentFunction !== null) {
+      var fn = currentFunction.name;
+      if (symbols[cl][fn] === undefined) {
+        symbols[cl][fn] = {
+          _offset: 0
+        };
+      }
+      symbols[cl][fn][name] = _.clone(denoter)
+      symbols[cl][fn][name].offset = symbols[cl]._offset;
+      symbols[cl][fn]._offset += denoter.size;
+    } else {
+      symbols[cl][name] = _.clone(denoter);
+      symbols[cl][name].offset = symbols[cl]._offset;
+      // a denoter should always have a size
+      symbols[cl]._offset += denoter.size;
+    }
   };
+
+  // find symbol accessible from he current context
   var findSymbol = function (name) {
-    return symbols[name]
+    var cl = currentClass.name;
+    var fn = currentFunction.name;
+    if (symbols[cl]) {
+      if (symbols[cl][fn]) {
+        if (symbols[cl][fn][name]) {
+          return symbols[cl][fn][name];
+        }
+      } else if (symbols[cl][name]) {
+        return symbols[cl][name];
+      }
+    }
   };
 
   var classes = {};
@@ -313,10 +346,17 @@ variable_declaration:
 
 func_declaration_list:
   func_declaration_list SEMICOLON function_declaration {
+    currentFunction = null;
     $$ = $1.concat($3);
   }
-| function_declaration { $$ = [$1]; }
-| { $$ = []; }
+| function_declaration {
+    currentFunction = null;
+    $$ = [$1];
+}
+| {
+    currentFunction = null;
+    $$ = [];
+  }
 ;
 
 formal_parameter_list:
@@ -613,7 +653,7 @@ index_expression:
 
 attribute_designator:
   variable_access DOT identifier {
-    var offset = getOffset($1); 
+    var offset = getOffset($1);
     mips.addi($1.register, $1.register, offset);
   }
 ;
@@ -692,7 +732,7 @@ expression: simple_expression
   }
 ;
 
-simple_expression: term 
+simple_expression: term
 | simple_expression addop term {
     switch ($2) {
       case '+':
