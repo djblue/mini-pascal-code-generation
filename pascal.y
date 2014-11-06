@@ -849,19 +849,22 @@ primary:
     $$ = $2;
   }
 | function_designator {
-    // back up registers
-    var undo = regBackup();
     // set parameters
     var a = 0;
     $1.params.forEach(function (reg) {
       mips.mov('$a' + a, reg);
       a++;
+      release(reg);
     });
+    // back up registers
+    var undo = regBackup();
     // make call
     mips.jal(currentClass.name + '_' + $1.name);
     // fix stack frame
     undo();
-    $$ = $v0;
+    var reg = $t();
+    mips.mov(reg, $v0);
+    $$ = reg;
   }
 | NOT primary {
   }
