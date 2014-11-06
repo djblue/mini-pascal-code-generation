@@ -1,5 +1,5 @@
 %{
-  var mips = require('./mips');
+  var mips = require('./mips');/*{{{*//*}}}*/
   var _ = require('underscore');
 
   // context variables
@@ -9,6 +9,15 @@
   var currentId = null;
 
   var symbols = {};
+
+  var stackSize = function (fn) {
+    var cl = currentClass.name;
+    if (symbols[cl][fn]) {
+      return symbols[cl][fn]._offset;
+    } else {
+      return 0;
+    }
+  };
 
   var symbolOffset = 0;
 
@@ -30,13 +39,17 @@
         };
       }
       symbols[cl][fn][name] = _.clone(denoter)
-      symbols[cl][fn][name].offset = symbols[cl]._offset;
-      symbols[cl][fn]._offset += denoter.size;
+      symbols[cl][fn][name].offset = symbols[cl][fn]._offset;
+      if (denoter.size) {
+        symbols[cl][fn]._offset += denoter.size;
+      }
     } else {
       symbols[cl][name] = _.clone(denoter);
       symbols[cl][name].offset = symbols[cl]._offset;
       // a denoter should always have a size
-      symbols[cl]._offset += denoter.size;
+      if (denoter.size) {
+        symbols[cl]._offset += denoter.size;
+      }
     }
   };
 
@@ -56,6 +69,15 @@
   };
 
   var classes = {};
+
+  // get the size of a datatype
+  var getSize = function (id) {
+    if (id == 'integer' || id == 'boolean') {
+      return 4;
+    } else {
+      return classes[id].size;
+    }
+  };
 
   var getOffset = function () {
     mips.comment('getting offset for ' + currentType.name + '.'+ currentId);
@@ -264,7 +286,21 @@ class_block:
     });
     $2.forEach(function (func) {
       mips.label(func.heading.label);
+      var stack = stackSize(func.heading.name);
+      if (stack !== 0) {
+        mips.comment('allocate stack space (' + stack + ' bytes)');
+        mips.addi($sp, $sp, -1 * stack);
+      }
+      if (func.heading.parameters.length > 0) {
+        mips.nest(func.heading.instructions);
+      }
       mips.nest(func.block.statements.instructions);
+
+      if (stack !== 0) {
+        mips.comment('deallocate stack space (' + stack + ' bytes)');
+        mips.addi($sp, $sp, 1 * stack);
+      }
+
       mips.jr();
       console.log('\n' + mips.clear().join('\n'));
     });
@@ -361,7 +397,7 @@ func_declaration_list:
 
 formal_parameter_list:
   LPAREN formal_parameter_section_list RPAREN {
-    $$ = $1;
+    $$ = $2;
   }
 ;
 
@@ -389,7 +425,8 @@ variable_parameter_specification:
     $$ = {
       identifiers: $2,
       denoter: {
-        name: $4
+        name: $4,
+        size: getSize($4)
       }
     };
   }
@@ -417,6 +454,7 @@ function_heading:
     currentFunction = {
       name: $2,
       label: label,
+      parameters: [],
       result: $4
     };
     $$ = currentFunction;
@@ -433,6 +471,19 @@ function_heading:
     };
     $$ = currentFunction;
     addSymbol($2, { result: true, type: 'return' });
+
+    // wait to set current function to parameters get
+    // bound to this function
+    mips.comment('loading parameters');
+    var a = 0;
+    $3.forEach(function (param) {
+      param.identifiers.forEach(function (id) {
+        addSymbol(id, param.denoter);
+        mips.sw('$a' + a, $sp, findSymbol(id).offset);
+        a++;
+      });
+    });
+    currentFunction.instructions = mips.clear();
   }
 ;
 
@@ -444,7 +495,8 @@ function_identification:
     //mips.label(label);
     currentFunction = {
       name: $2,
-      label: label
+      label: label,
+      parameters: []
     };
     $$ = currentFunction;
   }
@@ -800,6 +852,11 @@ primary:
     // back up registers
     var undo = regBackup();
     // set parameters
+    var a = 0;
+    $1.params.forEach(function (reg) {
+      mips.mov('$a' + a, reg);
+      a++;
+    });
     // make call
     mips.jal(currentClass.name + '_' + $1.name);
     // fix stack frame
