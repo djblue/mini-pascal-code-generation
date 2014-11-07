@@ -5,7 +5,6 @@
   // context variables
   var currentClass = null;
   var currentFunction = null;
-  var currentType = null;
   var currentId = null;
 
   var symbols = {};
@@ -29,8 +28,6 @@
         _offset: 0
       };
     }
-    //console.log(currentFunction);
-    //console.log(currentClass.name);
     if (currentFunction !== null) {
       var fn = currentFunction.name;
       if (symbols[cl][fn] === undefined) {
@@ -79,10 +76,11 @@
     }
   };
 
-  var getOffset = function () {
-    mips.comment('getting offset for ' + currentType.name + '.'+ currentId);
-    var cl = classes[currentType.name];
-    return cl.variables[currentId].offset
+  var getClassVar = function (access, variable) {
+    //var className = findSymbol(access.symbol).name;
+    //var v = classes[className].variables[variable];
+    //mips.comment('getting variable for ' + className + '.'+ variable);
+    return classes[access.type.name].variables[variable];
   };
 
   // registers
@@ -651,15 +649,15 @@ print_statement:
 
 variable_access:
   identifier {
-    currentType = findSymbol($1);
+    var type = findSymbol($1);
     // trying to assign to a function name
     if (findSymbol($1).result === true) {
       $$ = { register: $v0 };
     } else {
       var reg = $t();
       mips.comment(reg + ' <- addr(' + $1 + ')');
-      mips.addi(reg, $sp, findSymbol($1).offset);
-      $$ = { register: reg, symbol: $1 };
+      mips.addi(reg, $sp, type.offset);
+      $$ = { register: reg, symbol: $1, type: type };
     }
   }
 | indexed_variable {
@@ -672,7 +670,7 @@ variable_access:
 
 indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
-    var type = findSymbol($1.symbol);
+    var type = $1.type;
     var unit = type.unit;
     var lower = type.denoter.range.lower;
     var upper = type.denoter.range.upper;
@@ -705,8 +703,9 @@ index_expression:
 
 attribute_designator:
   variable_access DOT identifier {
-    var offset = getOffset($1);
-    mips.addi($1.register, $1.register, offset);
+    var variable = getClassVar($1, $3);
+    mips.addi($1.register, $1.register, variable.offset);
+    $$ = { register: $1.register, symbol: $3, type: variable };
   }
 ;
 
