@@ -102,7 +102,8 @@
     , $sp = '$sp'
     , $a0 = '$a0'
     , $v0 = '$v0'
-    , $s0 = '$s0'
+    , $s0 = '$s0' // this context
+    , $s1 = '$s1' // temp var
     , $ra = '$ra'
     ;
 
@@ -127,6 +128,7 @@
   // backup registers to stack
   var regBackup = function () {
     // allocate space on the stack (+1 for $ra)
+    mips.comment('backing up registers to the stack')
     mips.addi($sp, $sp, -4 * (regCount + 1));
     // backup temps
     for (var i = 0; i < regCount; i++) {
@@ -140,6 +142,7 @@
     // unload stack back into registers
     return function () {
 
+      mips.comment('restoring registers from the stack')
       regCount = i;
 
       mips.lw($ra, $sp, i*4);
@@ -162,6 +165,8 @@
 
   console.log('.text');
   console.log('main:');
+  console.log('addi $sp, $sp, -4');
+  console.log('addi $s1, $sp, 0');
   console.log('jal main_main');
   console.log('addi $v0, $zero, 10');
   console.log('syscall');
@@ -287,6 +292,7 @@ class_identification:
 class_block:
   variable_declaration_part func_declaration_list {
     var variables = {};
+    var functions = {};
     var offset = 0;
     $1.forEach(function (declaration) {
       declaration.identifiers.forEach(function (id) {
@@ -297,6 +303,7 @@ class_block:
     });
     //console.log(JSON.stringify(symbols, null, 2));
     $2.forEach(function (func) {
+      functions[func.heading.name] = func;
       mips.label(func.heading.label);
       var stack = stackSize(func.heading.name);
       if (stack !== 0) {
@@ -316,7 +323,7 @@ class_block:
       mips.jr();
       console.log('\n' + mips.clear().join('\n'));
     });
-    $$ = { variables: variables, size: offset, functions: $2 };
+    $$ = { variables: variables, size: offset, functions: functions };
   }
 ;
 
@@ -560,10 +567,11 @@ statement:
 
 assignment_statement:
   variable_access ASSIGNMENT expression {
-    mips.comment('assign expression');
     if ($1.register === $v0) {
+      mips.comment('setting return value');
       mips.mov($v0, $3);
     } else {
+      mips.comment('assign expression: ' + $1.symbol + ' = ' + $3);
       mips.sw($3 , $1.register);
     }
     $$ = {
@@ -669,17 +677,14 @@ variable_access:
       $$ = { register: $v0 };
     } else {
       var reg = $t();
-      mips.comment(reg + ' <- addr(' + $1 + ')');
+      mips.comment(reg + ' = addr(' + $1 + ')');
       mips.addi(reg, $sp, type.offset);
       $$ = { register: reg, symbol: $1, type: type };
     }
   }
-| indexed_variable {
-  }
-| attribute_designator {
-  }
-| method_designator {
-  }
+| indexed_variable { }
+| attribute_designator { }
+| method_designator { }
 ;
 
 indexed_variable:
@@ -706,14 +711,10 @@ indexed_variable:
 index_expression_list:
   index_expression_list COMMA index_expression {
   }
-| index_expression {
-  }
+| index_expression { }
 ;
 
-index_expression:
-  expression {
-  }
-;
+index_expression: expression { } ;
 
 attribute_designator:
   variable_access DOT identifier {
@@ -725,6 +726,29 @@ attribute_designator:
 
 method_designator:
   variable_access DOT function_designator {
+    var result = classes[$1.type.name].functions[$3.name].heading.result;
+    // set parameters
+    var a = 0;
+    $3.params.forEach(function (reg) {
+      mips.mov('$a' + a, reg);
+      a++;
+      release(reg);
+    });
+    mips.addi($sp, $sp, -4);
+    mips.sw($s0, $sp);
+    mips.comment('setting this context for ' + $1.type.name);
+    mips.mov($s0, $1.register);
+    // back up registers
+    var undo = regBackup();
+    // make call
+    mips.jal($1.type.name + '_' + $3.name);
+    // fix stack frame
+    undo();
+    mips.lw($s0, $sp);
+    mips.addi($sp, $sp, 4);
+    mips.comment('saving $v0 into temp var');
+    mips.sw($v0, $s1);
+    $$ = { register: $s1, symbol: $3.name, type: result };
   }
 ;
 
@@ -735,16 +759,11 @@ params:
 ;
 
 actual_parameter_list:
-  actual_parameter_list COMMA actual_parameter{
+  actual_parameter_list COMMA actual_parameter {
     $$ = $1.concat($3);
   }
-| actual_parameter {
-    $$ = [$1];
-  }
-|
-  {
-    $$ = [];
-  }
+| actual_parameter { $$ = [$1]; }
+| { $$ = []; }
 ;
 
 actual_parameter:
