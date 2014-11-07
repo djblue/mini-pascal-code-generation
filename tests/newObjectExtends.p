@@ -27,17 +27,19 @@ begin
     bb.yy := 24;
     print bb.yy;
 
+    parent := bb;
+
     ii := 0;
     while  ii < 6 do
       begin
-        bb.aa[ii] := ii;
+        parent.aa[ii] := ii;
         ii := ii + 1
       end;
 
     ii := 5;
     while ii > 0 do
       begin
-        print bb.aa[ii];
+        print parent.aa[ii];
         ii := ii - 1
       end
 

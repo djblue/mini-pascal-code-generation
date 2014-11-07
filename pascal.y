@@ -1,5 +1,5 @@
 %{
-  var mips = require('./mips');/*{{{*//*}}}*/
+  var mips = require('./mips');
   var _ = require('underscore');
 
   // context variables
