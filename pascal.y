@@ -23,10 +23,17 @@
   // add symbol to the current context
   var addSymbol = function (name, denoter) {
     var cl = currentClass.name;
+    var parent = currentClass.extends;
     if (symbols[cl] === undefined) {
-      symbols[cl] = {
-        _offset: 0
-      };
+      if (parent !== undefined) {
+        symbols[cl] = {
+          _offset: classes[parent].size
+        };
+      } else {
+        symbols[cl] = {
+          _offset: 0
+        };
+      }
     }
     if (currentFunction !== null) {
       var fn = currentFunction.name;
@@ -77,10 +84,15 @@
   };
 
   var getClassVar = function (access, variable) {
-    //var className = findSymbol(access.symbol).name;
-    //var v = classes[className].variables[variable];
-    //mips.comment('getting variable for ' + className + '.'+ variable);
-    return classes[access.type.name].variables[variable];
+    var type = classes[access.type.name];
+    if (type.variables[variable]) {
+      return type.variables[variable];
+    } else {
+      var parent = type.extends;
+      return getClassVar({
+        type: { name: parent }
+      }, variable);
+    }
   };
 
   // registers
@@ -90,6 +102,7 @@
     , $sp = '$sp'
     , $a0 = '$a0'
     , $v0 = '$v0'
+    , $s0 = '$s0'
     , $ra = '$ra'
     ;
 
@@ -282,6 +295,7 @@ class_block:
         offset += declaration.denoter.size;
       })
     });
+    //console.log(JSON.stringify(symbols, null, 2));
     $2.forEach(function (func) {
       mips.label(func.heading.label);
       var stack = stackSize(func.heading.name);
