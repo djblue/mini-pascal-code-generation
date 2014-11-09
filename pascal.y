@@ -5,7 +5,6 @@
   // context variables
   var currentClass = null;
   var currentFunction = null;
-  var currentId = null;
 
   var symbols = {};
 
@@ -17,8 +16,6 @@
       return 0;
     }
   };
-
-  var symbolOffset = 0;
 
   // add symbol to the current context
   var addSymbol = function (name, denoter) {
@@ -234,7 +231,6 @@
 
 program:
   program_heading SEMICOLON class_list DOT {
-    //console.log(JSON.stringify(classes, null, 2));
   }
 ;
 
@@ -246,12 +242,8 @@ program_heading:
 ;
 
 identifier_list:
-  identifier_list COMMA identifier {
-    $$ = $1.concat($3);
-  }
-| identifier {
-    $$ = [$1];
-  }
+  identifier_list COMMA identifier { $$ = $1.concat($3); }
+| identifier { $$ = [$1]; }
 ;
 
 class_list:
@@ -301,7 +293,6 @@ class_block:
         offset += declaration.denoter.size;
       })
     });
-    //console.log(JSON.stringify(symbols, null, 2));
     $2.forEach(function (func) {
       functions[func.heading.name] = func;
       mips.label(func.heading.label);
@@ -531,15 +522,10 @@ function_block:
   }
 ;
 
-statement_part:
-  compound_statement {
-  }
-;
+statement_part: compound_statement;
 
 compound_statement:
-  BEGIN statement_sequence END {
-    $$ = $2;
-  }
+  BEGIN statement_sequence END { $$ = $2; }
 ;
 
 statement_sequence:
@@ -638,18 +624,8 @@ if_statement:
 ;
 
 object_instantiation:
-  NEW identifier {
-    $$ = {
-      name: $2,
-      params: []
-    };
-  }
-| NEW identifier params {
-    $$ = {
-      name: $2,
-      params: $3
-    };
-  }
+  NEW identifier { $$ = { name: $2, params: [] }; }
+| NEW identifier params { $$ = { name: $2, params: $3 }; }
 ;
 
 print_statement:
@@ -752,11 +728,7 @@ method_designator:
   }
 ;
 
-params:
-  LPAREN actual_parameter_list RPAREN {
-    $$ = $2;
-  }
-;
+params: LPAREN actual_parameter_list RPAREN { $$ = $2; };
 
 actual_parameter_list:
   actual_parameter_list COMMA actual_parameter {
@@ -767,12 +739,9 @@ actual_parameter_list:
 ;
 
 actual_parameter:
-  expression {
-  }
-| expression COLON expression {
-  }
-| expression COLON expression COLON expression {
-  }
+  expression { }
+| expression COLON expression { }
+| expression COLON expression COLON expression { }
 ;
 
 boolean_expression: expression {
@@ -875,11 +844,8 @@ primary:
     mips.lw($1.register, $1.register);
     $$ = $1.register;
   }
-| unsigned_constant {
-  }
-| LPAREN expression RPAREN {
-    $$ = $2;
-  }
+| unsigned_constant { }
+| LPAREN expression RPAREN { $$ = $2; }
 | function_designator {
     // set parameters
     var a = 0;
@@ -915,10 +881,7 @@ unsigned_integer: DIGSEQ;
 
 function_designator:
   identifier params {
-    $$ = {
-      name: $1,
-      params: $2
-    };
+    $$ = { name: $1, params: $2 };
   }
 ;
 
@@ -927,8 +890,5 @@ mulop: STAR | SLASH | MOD | AND;
 relop: EQUAL | NOTEQUAL | LT | GT | LE | GE;
 
 identifier:
-  IDENTIFIER {
-    $$ = $1.toLowerCase();
-    currentId = $$;
-  }
+  IDENTIFIER { $$ = $1.toLowerCase(); }
 ;
