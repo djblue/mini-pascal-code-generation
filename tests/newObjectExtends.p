@@ -1,6 +1,11 @@
 program main;
 
-class boop
+class first
+begin
+  var qq : array[1..100] of integer;
+end
+
+class boop extends first
 begin
   var aa : array[1..5] of integer;
 end
