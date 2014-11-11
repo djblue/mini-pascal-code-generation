@@ -412,8 +412,7 @@ assignment_statement:
     release($3); // for expression evaluation
   }
 | variable_access ASSIGNMENT object_instantiation {
-    //var size = classes[$3.name].size;
-    var size = 0;
+    var size = syms.getSize($3.name);
     // allocate memory on the heap
     mips.comment('allocating memory for ' + $3.name);
     mips.comment('sizeof(' + $3.name + ') = ' + size);
@@ -505,6 +504,10 @@ variable_access:
       $$ = { register: reg, symbol: $1, denoter: variable.denoter };
     } else if (variable.isInstance) {
       // handle instance vars
+      var reg = $t();
+      mips.comment(reg + ' = addressOf (instance:' + $1 + ')');
+      mips.addi(reg, $s0, variable.offset);
+      $$ = { register: reg, symbol: $1, denoter: variable.denoter };
     }
   }
 | indexed_variable { }
