@@ -17,10 +17,9 @@ end
 class main 
 begin
 
-  var bb : beep;
-      ii : integer;
-
   function main;
+    var bb : beep;
+        ii : integer;
   begin
 
     bb := new beep;

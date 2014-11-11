@@ -3,10 +3,9 @@ program main;
 class main 
 begin
 
-  var aa : array[1..10] of integer;
-      ii : integer;
-
   function main;
+    var aa : array[1..10] of integer;
+        ii : integer;
   begin
 
     aa[1] := 1;

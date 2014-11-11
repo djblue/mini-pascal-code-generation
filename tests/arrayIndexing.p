@@ -2,8 +2,8 @@ program main;
 
 class main 
 begin
-  var aa : array[0..3] of integer;
   function main;
+    var aa : array[0..3] of integer;
   begin
     aa[0] := 1;
     aa[1] := 1;

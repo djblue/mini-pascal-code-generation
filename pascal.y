@@ -1,96 +1,6 @@
 %{
   var mips = require('./mips');
-  var _ = require('underscore');
-
-  // context variables
-  var currentClass = null;
-  var currentFunction = null;
-
-  var symbols = {};
-
-  var stackSize = function (fn) {
-    var cl = currentClass.name;
-    if (symbols[cl][fn]) {
-      return symbols[cl][fn]._offset;
-    } else {
-      return 0;
-    }
-  };
-
-  // add symbol to the current context
-  var addSymbol = function (name, denoter) {
-    var cl = currentClass.name;
-    var parent = currentClass.extends;
-    if (symbols[cl] === undefined) {
-      if (parent !== undefined) {
-        symbols[cl] = {
-          _offset: classes[parent].size
-        };
-      } else {
-        symbols[cl] = {
-          _offset: 0
-        };
-      }
-    }
-    if (currentFunction !== null) {
-      var fn = currentFunction.name;
-      if (symbols[cl][fn] === undefined) {
-        symbols[cl][fn] = {
-          _offset: 0
-        };
-      }
-      symbols[cl][fn][name] = _.clone(denoter)
-      symbols[cl][fn][name].offset = symbols[cl][fn]._offset;
-      if (denoter.size) {
-        symbols[cl][fn]._offset += denoter.size;
-      }
-    } else {
-      symbols[cl][name] = _.clone(denoter);
-      symbols[cl][name].offset = symbols[cl]._offset;
-      // a denoter should always have a size
-      if (denoter.size) {
-        symbols[cl]._offset += denoter.size;
-      }
-    }
-  };
-
-  // find symbol accessible from he current context
-  var findSymbol = function (name) {
-    var cl = currentClass.name;
-    var fn = currentFunction.name;
-    if (symbols[cl]) {
-      if (symbols[cl][fn]) {
-        if (symbols[cl][fn][name]) {
-          return symbols[cl][fn][name];
-        }
-      } else if (symbols[cl][name]) {
-        return symbols[cl][name];
-      }
-    }
-  };
-
-  var classes = {};
-
-  // get the size of a datatype
-  var getSize = function (id) {
-    if (id == 'integer' || id == 'boolean') {
-      return 4;
-    } else {
-      return classes[id].size;
-    }
-  };
-
-  var getClassVar = function (access, variable) {
-    var type = classes[access.type.name];
-    if (type.variables[variable]) {
-      return type.variables[variable];
-    } else {
-      var parent = type.extends;
-      return getClassVar({
-        type: { name: parent }
-      }, variable);
-    }
-  };
+  var syms = require('./symbols');
 
   // registers
   var $zero = '$0'
@@ -160,13 +70,17 @@
     }
   };
 
-  console.log('.text');
-  console.log('main:');
-  console.log('addi $sp, $sp, -4');
-  console.log('addi $s1, $sp, 0');
-  console.log('jal main_main');
-  console.log('addi $v0, $zero, 10');
-  console.log('syscall');
+  if (process.argv[3] === '--classes') {
+    var printClasses = true;
+  } else {
+    console.log('.text');
+    console.log('main:');
+    console.log('addi $sp, $sp, -4');
+    console.log('addi $s1, $sp, 0');
+    console.log('jal main_main');
+    console.log('addi $v0, $zero, 10');
+    console.log('syscall');
+  }
 
 %}
 
@@ -231,6 +145,10 @@
 
 program:
   program_heading SEMICOLON class_list DOT {
+    //console.log(JSON.stringify(symbols, null, 2));
+    if (printClasses) {
+      console.log(JSON.stringify(syms.classes, null, 2));
+    }
   }
 ;
 
@@ -248,73 +166,44 @@ identifier_list:
 
 class_list:
   class_list class_identification BEGIN class_block END {
-    $1[$2.name] = {
-      name: $2.name,
-      extends: $2.extends,
-      variables: $4.variables,
-      functions: $4.functions,
-      size: $4.size
-    };
-
-    $$ = $1;
   }
-| class_identification BEGIN class_block END {
-    $$ = classes;
-    $$[$1.name] = {
-      name: $1.name,
-      extends: $1.extends,
-      variables: $3.variables,
-      functions: $3.functions,
-      size: $3.size
-    };
-  }
+| class_identification BEGIN class_block END {}
 ;
 
 class_identification:
   CLASS identifier {
-    currentClass = { name: $2 };
-    $$ = currentClass;
+    syms.addClass($2);
   }
 | CLASS identifier EXTENDS identifier {
-    currentClass = { name: $2, extends: $4 };
-    $$ = currentClass;
+    syms.addClass($2, $4);
   }
 ;
 
 class_block:
   variable_declaration_part func_declaration_list {
-    var variables = {};
-    var functions = {};
-    var offset = 0;
-    $1.forEach(function (declaration) {
-      declaration.identifiers.forEach(function (id) {
-        variables[id] = declaration.denoter;
-        variables[id].offset = offset;
-        offset += declaration.denoter.size;
-      })
-    });
     $2.forEach(function (func) {
-      functions[func.heading.name] = func;
       mips.label(func.heading.label);
-      var stack = stackSize(func.heading.name);
+      var stack = func.heading.getStackSize();
       if (stack !== 0) {
         mips.comment('allocate stack space (' + stack + ' bytes)');
         mips.addi($sp, $sp, -1 * stack);
       }
-      if (func.heading.parameters.length > 0) {
+      if (func.heading.instructions.length === 0) {
+        mips.comment('no parameters to load');
+      } else {
         mips.nest(func.heading.instructions);
       }
-      mips.nest(func.block.statements.instructions);
 
+      mips.nest(func.block.statements.instructions);
       if (stack !== 0) {
         mips.comment('deallocate stack space (' + stack + ' bytes)');
         mips.addi($sp, $sp, 1 * stack);
       }
-
       mips.jr();
-      console.log('\n' + mips.clear().join('\n'));
+      if (!printClasses) {
+        console.log('\n' + mips.clear().join('\n'));
+      }
     });
-    $$ = { variables: variables, size: offset, functions: functions };
   }
 ;
 
@@ -338,7 +227,7 @@ type_denoter:
       $$ = {
         type: 'class',
         name: $1,
-        size: classes[$1].size
+        size: syms.getSize($1)
       };
     }
   }
@@ -362,31 +251,19 @@ range:
 ;
 
 variable_declaration_part:
-  VAR variable_declaration_list SEMICOLON {
-    $2.forEach(function (declaration) {
-      declaration.identifiers.forEach(function (id) {
-        addSymbol(id, declaration.denoter);
-      });
-    });
-    $$ = $2
-  }
-| { $$ = []; }
+  VAR variable_declaration_list SEMICOLON {}
+| { }
 ;
 
 variable_declaration_list:
   variable_declaration_list SEMICOLON variable_declaration {
-    $$ = $1.concat($3);
   }
-| variable_declaration { $$ = [$1]; }
+| variable_declaration { }
 ;
 
 variable_declaration:
   identifier_list COLON type_denoter {
-    $$ = {
-      identifiers: $1,
-      denoter: $3,
-      size: $1.length * $3.size
-    };
+    $1.forEach(function (id) { syms.addVariable(id, $3); });
   }
 ;
 
@@ -434,10 +311,7 @@ variable_parameter_specification:
   VAR identifier_list COLON identifier {
     $$ = {
       identifiers: $2,
-      denoter: {
-        name: $4,
-        size: getSize($4)
-      }
+      denoter: syms.getDenoter($4)
     };
   }
 ;
@@ -459,57 +333,27 @@ function_declaration:
 
 function_heading:
   FUNCTION identifier COLON result_type {
-    var label = currentClass.name + '_' + $2;
-    //mips.label(label);
-    currentFunction = {
-      name: $2,
-      label: label,
-      parameters: [],
-      result: $4
-    };
-    $$ = currentFunction;
-    addSymbol($2, { result: true, type: 'return' });
+    $$ = syms.addMethod($2, $4);
   }
 | FUNCTION identifier formal_parameter_list COLON result_type {
-    var label = currentClass.name + '_' + $2;
-    //mips.label(label);
-    currentFunction = {
-      name: $2,
-      label: label,
-      parameters: $3,
-      result: $5
-    };
-    $$ = currentFunction;
-    addSymbol($2, { result: true, type: 'return' });
-
-    // wait to set current function to parameters get
-    // bound to this function
-    mips.comment('loading parameters');
+    var method = $$ = syms.addMethod($2, $5);
     var a = 0;
-    $3.forEach(function (param) {
-      param.identifiers.forEach(function (id) {
-        addSymbol(id, param.denoter);
-        mips.sw('$a' + a, $sp, findSymbol(id).offset);
+    mips.comment('loading parameters for ' + $2);
+    $3.forEach(function (declaration) {
+      declaration.identifiers.forEach(function (id) {
+        var offset = method.addParam(id, declaration.denoter);
+        mips.sw('$a' + a, $sp, offset);
         a++;
       });
     });
-    currentFunction.instructions = mips.clear();
+    method.addInstructions(mips.clear());
   }
 ;
 
 result_type: identifier;
 
 function_identification:
-  FUNCTION identifier {
-    var label = currentClass.name + '_' + $2;
-    //mips.label(label);
-    currentFunction = {
-      name: $2,
-      label: label,
-      parameters: []
-    };
-    $$ = currentFunction;
-  }
+  FUNCTION identifier { $$ = syms.addMethod($2); }
 ;
 
 function_block:
@@ -568,7 +412,8 @@ assignment_statement:
     release($3); // for expression evaluation
   }
 | variable_access ASSIGNMENT object_instantiation {
-    var size = classes[$3.name].size;
+    //var size = classes[$3.name].size;
+    var size = 0;
     // allocate memory on the heap
     mips.comment('allocating memory for ' + $3.name);
     mips.comment('sizeof(' + $3.name + ') = ' + size);
@@ -647,15 +492,19 @@ print_statement:
 
 variable_access:
   identifier {
-    var type = findSymbol($1);
+    var variable = syms.lookup($1);
     // trying to assign to a function name
-    if (findSymbol($1).result === true) {
-      $$ = { register: $v0 };
-    } else {
+    if (variable.isResult) {
       var reg = $t();
-      mips.comment(reg + ' = addr(' + $1 + ')');
-      mips.addi(reg, $sp, type.offset);
-      $$ = { register: reg, symbol: $1, type: type };
+      mips.comment('setting return value');
+      $$ = { register: $v0 };
+    } else if (variable.isLocal) {
+      var reg = $t();
+      mips.comment(reg + ' = addressOf (local:' + $1 + ')');
+      mips.addi(reg, $sp, variable.offset);
+      $$ = { register: reg, symbol: $1, denoter: variable.denoter };
+    } else if (variable.isInstance) {
+      // handle instance vars
     }
   }
 | indexed_variable { }
@@ -665,10 +514,10 @@ variable_access:
 
 indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
-    var type = $1.type;
-    var unit = type.unit;
-    var lower = type.denoter.range.lower;
-    var upper = type.denoter.range.upper;
+    var denoter = $1.denoter;
+    var unit = denoter.unit;
+    var lower = denoter.denoter.range.lower;
+    var upper = denoter.denoter.range.upper;
     var $i = $t();
     mips.comment($1.symbol + '[' + lower + '..' + upper + '] = ' + unit + ' * $i');
     mips.addi($i, $zero, unit);
@@ -681,6 +530,9 @@ indexed_variable:
     // release registers
     release($i);
     release($3);
+
+    $$ = $1;
+    $$.denoter = $1.denoter.denoter;
   }
 ;
 
@@ -694,16 +546,17 @@ index_expression: expression { } ;
 
 attribute_designator:
   variable_access DOT identifier {
-    var variable = getClassVar($1, $3);
-    mips.addi($1.register, $1.register, variable.offset);
-    $$ = { register: $1.register, symbol: $3, type: variable };
+    var variable = syms.lookup($3, $1.denoter.name);
+    mips.addi($1.register, $1.register, 0);
+    $$ = { register: $1.register, symbol: $3, denoter: variable.denoter };
   }
 ;
 
 method_designator:
   variable_access DOT function_designator {
-    var result = classes[$1.type.name].functions[$3.name].heading.result;
+    //var result = classes[$1.type.name].functions[$3.name].heading.result;
     // set parameters
+    mips.comment('setting parameters for method call');
     var a = 0;
     $3.params.forEach(function (reg) {
       mips.mov('$a' + a, reg);
@@ -712,19 +565,20 @@ method_designator:
     });
     mips.addi($sp, $sp, -4);
     mips.sw($s0, $sp);
-    mips.comment('setting this context for ' + $1.type.name);
+    mips.comment('setting this context for ' + $1.denoter.name);
     mips.mov($s0, $1.register);
     // back up registers
     var undo = regBackup();
     // make call
-    mips.jal($1.type.name + '_' + $3.name);
+    var method = syms.getMethod($3.name, $1.denoter.name);
+    mips.jal(method.label);
     // fix stack frame
     undo();
     mips.lw($s0, $sp);
     mips.addi($sp, $sp, 4);
     mips.comment('saving $v0 into temp var');
     mips.sw($v0, $s1);
-    $$ = { register: $s1, symbol: $3.name, type: result };
+    $$ = { register: $s1, symbol: $3.name, denoter: method.denoter };
   }
 ;
 
@@ -857,7 +711,9 @@ primary:
     // back up registers
     var undo = regBackup();
     // make call
-    mips.jal(currentClass.name + '_' + $1.name);
+    var method = syms.getMethod($1.name);
+    mips.comment('making function call to ' + $1.name);
+    mips.jal(method.label);
     // fix stack frame
     undo();
     var reg = $t();

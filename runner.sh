@@ -50,10 +50,11 @@ for f in $(ls ./tests/*.p | grep "$grepstr"); do
   node pascal.js $f > $TEMP_FILE
   # tail to get rid of annoying header
   output=$(spim -file $TEMP_FILE | tail -n +6 | diff --context $f.out -)
+
   if [ $? == 0 ]; then
     pass=$((pass+1))
     if [ "$showpass" == "1" ]; then
-      echo "$(green PASS): $f"
+      echo "$(green PASS): $f.out"
     fi
   else
     fail=$((fail+1))
@@ -68,6 +69,13 @@ for f in $(ls ./tests/*.p | grep "$grepstr"); do
       fi
     fi
   fi
+
+  if [ -f $f.js ]; then
+    node pascal.js $f --classes > output.json
+    node $f.js
+    rm output.json
+  fi
+
 done
 
 rm $TEMP_FILE

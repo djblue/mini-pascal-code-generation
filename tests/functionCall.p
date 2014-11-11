@@ -2,12 +2,12 @@ program main;
 
 class main 
 begin
-  var aa : integer;
   function go : integer;
   begin
     go := 64
   end;
   function main;
+    var aa : integer;
   begin
     aa := 1;
     print aa;

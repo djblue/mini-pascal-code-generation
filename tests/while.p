@@ -2,8 +2,8 @@ program main;
 
 class main 
 begin
-  var aa : integer;
   function main;
+    var aa : integer;
   begin
     aa := 0;
     while aa < 10 do

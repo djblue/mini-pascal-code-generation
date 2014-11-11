@@ -13,21 +13,24 @@ end
 
 class beep extends boop
 begin
-  var yy, xx : integer;
+  var bleep : first;
+      yy, xx, zz : integer;
 end
 
 class main 
 begin
 
-  var bb : beep;
-      parent : boop;
-      ii : integer;
-
   function main;
+    var bb : beep;
+        parent : boop;
+        ii : integer;
   begin
 
     bb := new beep;
     bb.xx := 56;
+
+    bb.qq[3] := 89;
+
     print bb.xx;
     bb.yy := 24;
     print bb.yy;
