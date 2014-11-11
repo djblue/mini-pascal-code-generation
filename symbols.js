@@ -134,7 +134,7 @@ exports.getSize = function (name) {
 //  will look up "name" in class.
 exports.lookup = function (name, klass) {
   // name is current function name
-  if (name === fn.name) {
+  if (fn !== null && name === fn.name) {
     return {
       isResult: true,
       name: name,
