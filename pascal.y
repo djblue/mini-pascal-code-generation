@@ -145,7 +145,6 @@
 
 program:
   program_heading SEMICOLON class_list DOT {
-    //console.log(JSON.stringify(symbols, null, 2));
     if (printClasses) {
       console.log(JSON.stringify(syms.classes, null, 2));
     }
@@ -269,17 +268,10 @@ variable_declaration:
 
 func_declaration_list:
   func_declaration_list SEMICOLON function_declaration {
-    currentFunction = null;
     $$ = $1.concat($3);
   }
-| function_declaration {
-    currentFunction = null;
-    $$ = [$1];
-}
-| {
-    currentFunction = null;
-    $$ = [];
-  }
+| function_declaration { $$ = [$1]; }
+| { $$ = []; }
 ;
 
 formal_parameter_list:
@@ -296,15 +288,12 @@ formal_parameter_section_list:
 ;
 
 formal_parameter_section:
-  value_parameter_specification {
-  }
-| variable_parameter_specification {
-  }
+  value_parameter_specification { }
+| variable_parameter_specification { }
 ;
 
 value_parameter_specification:
-  identifier_list COLON identifier {
-  }
+  identifier_list COLON identifier { }
 ;
 
 variable_parameter_specification:
@@ -318,16 +307,10 @@ variable_parameter_specification:
 
 function_declaration:
   function_identification SEMICOLON function_block {
-    $$ = {
-      heading: $1,
-      block: $3
-    };
+    $$ = { heading: $1, block: $3 };
   }
 | function_heading SEMICOLON function_block {
-    $$ = {
-      heading: $1,
-      block: $3
-    };
+    $$ = { heading: $1, block: $3 };
   }
 ;
 
@@ -550,7 +533,7 @@ index_expression: expression { } ;
 attribute_designator:
   variable_access DOT identifier {
     var variable = syms.lookup($3, $1.denoter.name);
-    mips.addi($1.register, $1.register, 0);
+    mips.addi($1.register, $1.register, variable.offset);
     $$ = { register: $1.register, symbol: $3, denoter: variable.denoter };
   }
 ;
