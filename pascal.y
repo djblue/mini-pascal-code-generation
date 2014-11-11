@@ -397,8 +397,7 @@ assignment_statement:
 | variable_access ASSIGNMENT object_instantiation {
     var size = syms.getSize($3.name);
     // allocate memory on the heap
-    mips.comment('allocating memory for ' + $3.name);
-    mips.comment('sizeof(' + $3.name + ') = ' + size);
+    mips.comment('allocating memory: ' + ' sizeof(' + $3.name + ') = ' + size);
     mips.addi($v0, $zero, 9);
     mips.addi($a0, $zero, size); // how many btyes to allocate
     mips.syscall();
@@ -457,7 +456,7 @@ object_instantiation:
 
 print_statement:
   PRINT variable_access {
-    mips.comment('printing');
+    mips.comment('printing: ' + $2.symbol);
     mips.addi($v0, $zero, 1);
     mips.lw($a0, $2.register);
     mips.syscall();
@@ -533,6 +532,8 @@ index_expression: expression { } ;
 attribute_designator:
   variable_access DOT identifier {
     var variable = syms.lookup($3, $1.denoter.name);
+    mips.comment('dereferencing ' + $1.symbol + '.' + $3);
+    mips.lw($1.register, $1.register);
     mips.addi($1.register, $1.register, variable.offset);
     $$ = { register: $1.register, symbol: $3, denoter: variable.denoter };
   }

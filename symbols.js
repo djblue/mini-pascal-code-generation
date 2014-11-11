@@ -88,14 +88,20 @@ exports.addMethod = function (name, denoterId) {
   return fn;
 };
 
+// find a method by name
+// name - name of method to lookup
+// klass - the name of the class to search through
 exports.getMethod = function (name, klass) {
   if (klass !== undefined) {
-    return classes[klass].funcs[name];
+    return classes[klass].funcs[name] ||
+      exports.getMethod(name, classes[klass].parent);
   } else {
-    return cl.funcs[name];
+    return cl.funcs[name] ||
+      exports.getMethod(name, cl.parent);
   }
 };
 
+// add a new class to the classes list
 // name - name of class to add
 // parent - name of parent class
 exports.addClass = function (name, parent) {
@@ -124,6 +130,7 @@ exports.addClass = function (name, parent) {
 };
 
 // get the size of a class
+// name - name of class
 exports.getSize = function (name) {
   return classes[name].size;
 };
@@ -141,7 +148,7 @@ exports.lookup = function (name, klass) {
       denoter: fn.denoter
     };
   // search parent for fields
-  } else if (klass != undefined) {
+  } else if (klass !== undefined) {
     klass = classes[klass];
     return klass.vars[name] ||
       exports.lookup(name, klass.parent);
@@ -151,6 +158,7 @@ exports.lookup = function (name, klass) {
 };
 
 // get the type denote by type name
+// name - name of the type type
 exports.getDenoter = function (name) {
   if (name === 'integer' || name === 'boolean') {
     return {
