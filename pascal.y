@@ -557,8 +557,6 @@ attribute_designator:
 
 method_designator:
   variable_access DOT function_designator {
-    //var result = classes[$1.type.name].functions[$3.name].heading.result;
-    // set parameters
     mips.comment('setting parameters for method call');
     var a = 0;
     $3.params.forEach(function (reg) {
@@ -569,7 +567,7 @@ method_designator:
     mips.addi($sp, $sp, -4);
     mips.sw($s0, $sp);
     mips.comment('setting this context for ' + $1.denoter.name);
-    mips.mov($s0, $1.register);
+    mips.lw($s0, $1.register);
     // back up registers
     var undo = regBackup();
     // make call
