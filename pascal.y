@@ -399,7 +399,7 @@ assignment_statement:
     // allocate memory on the heap
     mips.comment('allocating memory: ' + ' sizeof(' + $3.name + ') = ' + size);
     mips.addi($v0, $zero, 9);
-    mips.addi($a0, $zero, size); // how many btyes to allocate
+    mips.addi($a0, $zero, size); // how many bytes to allocate
     mips.syscall();
     mips.sw($v0, $1.register);
     $$ = {
@@ -658,7 +658,7 @@ term: factor
         mips.mfhi($1);
         break;
       case '&':
-        mips.and($3, $1, $3);
+        mips.and($1, $1, $3);
         break;
     }
     $$ = $1;
