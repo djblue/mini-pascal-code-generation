@@ -633,7 +633,7 @@ simple_expression: term
       case '-':
         mips.sub($1, $1, $3);
         break;
-      case '|':
+      case 'or':
         mips.or($1, $1, $3);
         break;
     }
@@ -657,7 +657,7 @@ term: factor
         mips.div($1, $3);
         mips.mfhi($1);
         break;
-      case '&':
+      case 'and':
         mips.and($1, $1, $3);
         break;
     }
