@@ -26,11 +26,9 @@
 
   var regCount = 0;
   // get next temporary register available
-  var $t = (function () {
-    return function () {
-      return '$t' + regCount++;
-    };
-  })();
+  var $t = function () {
+    return '$t' + regCount++;
+  };
 
   // backup registers to stack
   var regBackup = function () {
@@ -476,7 +474,6 @@ variable_access:
     var variable = syms.lookup($1);
     // trying to assign to a function name
     if (variable.isResult) {
-      var reg = $t();
       mips.comment('setting return value');
       $$ = { register: $v0 };
     } else if (variable.isLocal) {
