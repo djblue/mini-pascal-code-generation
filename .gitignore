@@ -1,3 +1,6 @@
+.DS_STORE
 node_modules
 pascal.js
 output.json
+Vagrantfile
+.vagrant/
