@@ -36,7 +36,7 @@ begin
   begin
     mm := 0;
     aa := new ackermann;
-    while mm < 4 do
+    while mm < 3 do
       begin
         nn := 0;
         while nn < 5 do

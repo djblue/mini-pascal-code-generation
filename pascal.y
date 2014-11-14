@@ -496,6 +496,7 @@ variable_access:
 
 indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
+
     var denoter = $1.denoter;
     var unit = denoter.unit;
     var lower = denoter.denoter.range.lower;
@@ -506,15 +507,17 @@ indexed_variable:
     if (lower !== 0) {
       mips.addi($3, $3, -1*lower);
     }
+
     mips.mult($i, $3);
     mips.mflo($i);
+
     mips.add($1.register, $1.register, $i);
     // release registers
     release($i);
     release($3);
 
     $$ = $1;
-    $$.denoter = $1.denoter;
+    $$.denoter = $1.denoter.denoter.denoter;
   }
 ;
 
