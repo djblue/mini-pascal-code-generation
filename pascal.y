@@ -514,7 +514,7 @@ indexed_variable:
     release($3);
 
     $$ = $1;
-    $$.denoter = $1.denoter.denoter;
+    $$.denoter = $1.denoter;
   }
 ;
 
