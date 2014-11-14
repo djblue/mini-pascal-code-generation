@@ -5,9 +5,9 @@ begin
 
   function sort(var aa : array[0..10] of integer) : integer;
   begin
+    print aa[0];
     aa[1] := 1;
-    print aa[1];
-    sort := aa[0]
+    sort := aa[1]
   end
 
 end
