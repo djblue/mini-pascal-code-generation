@@ -63,7 +63,7 @@
 
   // release register
   var release = function (reg) {
-    if (reg !== $v0) {
+    if (reg.match(/^\$t\d$/)) {
       regCount--;
     }
   };
@@ -677,8 +677,14 @@ factor:
 
 primary:
   variable_access {
-    mips.lw($1.register, $1.register);
-    $$ = $1.register;
+    if ($1.register === $s1) {
+      var reg = $t();
+      mips.lw(reg, $1.register);
+      $$ = reg;
+    } else {
+      mips.lw($1.register, $1.register);
+      $$ = $1.register;
+    }
   }
 | unsigned_constant { }
 | LPAREN expression RPAREN { $$ = $2; }
