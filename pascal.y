@@ -295,10 +295,10 @@ value_parameter_specification:
 ;
 
 variable_parameter_specification:
-  VAR identifier_list COLON identifier {
+  VAR identifier_list COLON type_denoter {
     $$ = {
       identifiers: $2,
-      denoter: syms.getDenoter($4)
+      denoter: $4
     };
   }
 ;
