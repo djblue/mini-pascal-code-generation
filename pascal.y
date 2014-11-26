@@ -73,12 +73,6 @@
     var printClasses = true;
   } else {
     console.log('.text');
-    console.log('main:');
-    console.log('addi $sp, $sp, -4');
-    console.log('addi $s1, $sp, 0');
-    console.log('jal main_main');
-    console.log('addi $v0, $zero, 10');
-    console.log('syscall');
   }
 
 %}
@@ -152,6 +146,23 @@ program:
 
 program_heading:
   PROGRAM identifier {
+    if (!printClasses) {
+
+      mips.label($2);
+      mips.comment('allocate global temp var');
+      mips.addi($sp, $sp, -4);
+      mips.addi($s1, $sp, 0);
+
+      var main = $2 + '_' + $2
+      mips.comment('jump to main method "' + main + '"');
+      mips.jal(main);
+
+      mips.comment('exit program');
+      mips.li($v0, 10);
+      mips.syscall();
+
+      console.log(mips.clear().join('\n'))
+    }
   }
 | PROGRAM identifier LPAREN identifier_list RPAREN {
   }

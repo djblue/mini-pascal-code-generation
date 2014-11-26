@@ -69,6 +69,10 @@ exports.mov = function ($d, $s) {
   exports.addi($d, $s, '0');
 };
 
+exports.li = function ($d, c) {
+  exports.addi($d, '$0', c);
+}
+
 exports.mfhi = function ($d) { // $d = hi
   add('mfhi ' + $d);
 };
