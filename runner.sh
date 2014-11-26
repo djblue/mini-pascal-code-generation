@@ -84,3 +84,8 @@ echo "=== Totals =============================="
 echo "$(green PASS): $pass"
 echo "$(red FAIL): $fail"
 echo "========================================="
+
+# non zero exit code for failure
+if [ "$fail" != "0" ]; then
+  exit 2
+fi
