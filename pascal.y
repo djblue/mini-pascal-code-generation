@@ -9,8 +9,9 @@
     , $sp = '$sp'
     , $a0 = '$a0'
     , $v0 = '$v0'
-    , $s0 = '$s0' // this context
-    , $s1 = '$s1' // temp var
+    , $s0 = '$s0' // this context (base address of object)
+    , $s1 = '$s1' // temp variable address
+    , $s2 = '$s2' // temp conditional eval register
     , $ra = '$ra'
     ;
 
@@ -423,7 +424,6 @@ while_statement:
       type: 'while',
       instructions: mips.clear()
     };
-    release($2.register); // release register for condition
   }
 ;
 
@@ -443,7 +443,6 @@ if_statement:
       type: 'if',
       instructions: mips.clear()
     };
-    release($2.register); // release register for condition
   }
 ;
 
@@ -601,11 +600,13 @@ actual_parameter:
 ;
 
 boolean_expression: expression {
+  mips.mov($s2, $1);
   $$ = {
     type: 'boolean',
-    register: $1,
+    register: $s2,
     instructions: mips.clear()
   };
+  release($1);
 };
 
 expression: simple_expression
