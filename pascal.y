@@ -471,22 +471,39 @@ print_statement:
 
 variable_access:
   identifier {
-    var variable = syms.lookup($1);
-    // trying to assign to a function name
-    if (variable.isResult) {
-      mips.comment('setting return value');
-      $$ = { register: $v0 };
-    } else if (variable.isLocal) {
+    if ($1 === 'true' || $1 === 'false') {
+      var value = ($1 === 'true')? 1 : 0;
       var reg = $t();
-      mips.comment(reg + ' = addressOf (local:' + $1 + ')');
-      mips.addi(reg, $sp, variable.offset);
-      $$ = { register: reg, symbol: $1, denoter: variable.denoter };
-    } else if (variable.isInstance) {
-      // handle instance vars
-      var reg = $t();
-      mips.comment(reg + ' = addressOf (instance:' + $1 + ')');
-      mips.addi(reg, $s0, variable.offset);
-      $$ = { register: reg, symbol: $1, denoter: variable.denoter };
+      mips.addi(reg, $zero, value);
+      mips.sw(reg, $s1);
+      release(reg);
+      $$ = {
+        register: $s1,
+        symbol: $1,
+        denoter: {
+          type: 'primitive',
+          name: 'boolean',
+          size: 4
+        }
+      };
+    } else {
+      var variable = syms.lookup($1);
+      // trying to assign to a function name
+      if (variable.isResult) {
+        mips.comment('setting return value');
+        $$ = { register: $v0 };
+      } else if (variable.isLocal) {
+        var reg = $t();
+        mips.comment(reg + ' = addressOf (local:' + $1 + ')');
+        mips.addi(reg, $sp, variable.offset);
+        $$ = { register: reg, symbol: $1, denoter: variable.denoter };
+      } else if (variable.isInstance) {
+        // handle instance vars
+        var reg = $t();
+        mips.comment(reg + ' = addressOf (instance:' + $1 + ')');
+        mips.addi(reg, $s0, variable.offset);
+        $$ = { register: reg, symbol: $1, denoter: variable.denoter };
+      }
     }
   }
 | indexed_variable { }
