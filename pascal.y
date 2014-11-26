@@ -148,7 +148,7 @@ program_heading:
   PROGRAM identifier {
     if (!printClasses) {
 
-      mips.label($2);
+      mips.label('main');
       mips.comment('allocate global temp var');
       mips.addi($sp, $sp, -4);
       mips.addi($s1, $sp, 0);
@@ -303,7 +303,12 @@ formal_parameter_section:
 ;
 
 value_parameter_specification:
-  identifier_list COLON identifier { }
+  identifier_list COLON identifier {
+    $$ = {
+      identifiers: $1,
+      denoter: syms.getDenoter($3)
+    };
+  }
 ;
 
 variable_parameter_specification:
