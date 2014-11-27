@@ -70,7 +70,7 @@ exports.mov = function ($d, $s) {
 };
 
 exports.li = function ($d, c) {
-  exports.addi($d, '$0', c);
+  add('li ' + $d + ', ' + c);
 }
 
 exports.mfhi = function ($d) { // $d = hi

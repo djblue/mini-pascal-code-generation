@@ -195,7 +195,10 @@ class_block:
       var stack = func.heading.getStackSize();
       if (stack !== 0) {
         mips.comment('allocate stack space (' + stack + ' bytes)');
-        mips.addi($sp, $sp, -1 * stack);
+        var reg = $t();
+        mips.li(reg, -1 * stack);
+        mips.add($sp, $sp, reg);
+        release(reg);
       }
       if (func.heading.instructions.length === 0) {
         mips.comment('no parameters to load');
@@ -206,7 +209,10 @@ class_block:
       mips.nest(func.block.statements.instructions);
       if (stack !== 0) {
         mips.comment('deallocate stack space (' + stack + ' bytes)');
-        mips.addi($sp, $sp, 1 * stack);
+        var reg = $t();
+        mips.li(reg, stack);
+        mips.add($sp, $sp, reg);
+        release(reg);
       }
       mips.jr();
       if (!printClasses) {
@@ -413,8 +419,8 @@ assignment_statement:
     var size = syms.getSize($3.name);
     // allocate memory on the heap
     mips.comment('allocating memory: ' + ' sizeof(' + $3.name + ') = ' + size);
-    mips.addi($v0, $zero, 9);
-    mips.addi($a0, $zero, size); // how many bytes to allocate
+    mips.li($v0, 9);
+    mips.li($a0, size); // how many bytes to allocate
     mips.syscall();
     mips.sw($v0, $1.register);
     $$ = {
@@ -489,7 +495,7 @@ variable_access:
     if ($1 === 'true' || $1 === 'false') {
       var value = ($1 === 'true')? 1 : 0;
       var reg = $t();
-      mips.addi(reg, $zero, value);
+      mips.li(reg, value);
       mips.sw(reg, $s1);
       release(reg);
       $$ = {
@@ -510,13 +516,15 @@ variable_access:
       } else if (variable.isLocal) {
         var reg = $t();
         mips.comment(reg + ' = addressOf (local:' + $1 + ')');
-        mips.addi(reg, $sp, variable.offset);
+        mips.li(reg, variable.offset);
+        mips.add(reg, $sp, reg);
         $$ = { register: reg, symbol: $1, denoter: variable.denoter };
       } else if (variable.isInstance) {
         // handle instance vars
         var reg = $t();
         mips.comment(reg + ' = addressOf (instance:' + $1 + ')');
-        mips.addi(reg, $s0, variable.offset);
+        mips.li(reg, variable.offset);
+        mips.add(reg, $s0, reg);
         $$ = { register: reg, symbol: $1, denoter: variable.denoter };
       }
     }
@@ -535,7 +543,7 @@ indexed_variable:
     var upper = denoter.denoter.range.upper;
     var $i = $t();
     mips.comment($1.symbol + '[' + lower + '..' + upper + '] = ' + unit + ' * $i');
-    mips.addi($i, $zero, unit);
+    mips.li($i, unit);
     if (lower !== 0) {
       mips.addi($3, $3, -1*lower);
     }
@@ -566,7 +574,10 @@ attribute_designator:
     var variable = syms.lookup($3, $1.denoter.name);
     mips.comment('dereferencing ' + $1.symbol + '.' + $3);
     mips.lw($1.register, $1.register);
-    mips.addi($1.register, $1.register, variable.offset);
+    var reg = $t();
+    mips.li(reg, variable.offset);
+    mips.add($1.register, $1.register, reg);
+    release(reg);
     $$ = { register: $1.register, symbol: $3, denoter: variable.denoter };
   }
 ;
@@ -752,7 +763,7 @@ primary:
 unsigned_constant:
   unsigned_number {
     var reg = $t();
-    mips.addi(reg, $zero, $1);
+    mips.li(reg, $1);
     $$ = reg;
   }
 ;
