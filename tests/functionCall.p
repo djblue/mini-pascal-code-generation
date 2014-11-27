@@ -2,10 +2,12 @@ program main;
 
 class main 
 begin
+
   function go : integer;
   begin
     go := 64
   end;
+
   function main;
     var aa : integer;
   begin
@@ -16,5 +18,6 @@ begin
     aa := aa + go() + 10;
     print aa
   end
+
 end
 .

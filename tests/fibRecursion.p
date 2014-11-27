@@ -3,7 +3,7 @@ program main;
 class main 
 begin
 
-  function fib (var nn : integer) : integer;
+  function fib (nn : integer) : integer;
   begin
     if nn < 3
     then

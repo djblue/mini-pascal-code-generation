@@ -4,7 +4,7 @@ class thingy
 begin
   var aa : integer;
 
-  function setAA(var ii : integer) : integer;
+  function setAA(ii : integer) : integer;
   begin
     aa := ii;
     setAA := aa
@@ -24,6 +24,7 @@ end
 
 class main
 begin
+
   function main;
     var aa : thing;
   begin
@@ -34,5 +35,6 @@ begin
     print aa.bb;
     print aa.aa
   end
+
 end
 .

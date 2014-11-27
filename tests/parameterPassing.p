@@ -2,7 +2,7 @@ program main;
 
 class main 
 begin
-  function square (var aa : integer) : integer;
+  function square (aa : integer) : integer;
     var bb : integer;
   begin
     print aa;

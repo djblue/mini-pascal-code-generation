@@ -3,7 +3,7 @@ program main;
 class main 
 begin
 
-  function ackermann (var mm, nn : integer) : integer;
+  function ackermann (mm, nn : integer) : integer;
   begin
     if mm < 1
     then

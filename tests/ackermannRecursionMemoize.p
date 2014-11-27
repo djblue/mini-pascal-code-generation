@@ -5,7 +5,7 @@ begin
 
   var memo : array[0..10] of array[0..10] of integer;
 
-  function ackermannMemo (var mm, nn : integer) : integer;
+  function ackermannMemo (mm, nn : integer) : integer;
   begin
     if memo[mm][nn] = 0 then
       begin

@@ -3,7 +3,7 @@ program main;
 class thing
 begin
   var aa : integer;
-  function action(var ii : integer) : integer;
+  function action(ii : integer) : integer;
   begin
     action := ii
   end

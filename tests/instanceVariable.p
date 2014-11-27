@@ -7,7 +7,7 @@ begin
       yy, xx, zz : integer;
       ww : array[51..100] of integer; 
 
-  function setXX (var argxx : integer) : integer;
+  function setXX (argxx : integer) : integer;
   begin
     xx := argxx;
     setXX := argxx
@@ -17,6 +17,7 @@ begin
   begin
     getXX := xx
   end
+
 end
 
 class main 

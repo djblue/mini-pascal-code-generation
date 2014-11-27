@@ -2,6 +2,7 @@ program main;
 
 class main
 begin
+
   function main;
     var aa : array[0..10] of integer;
         ii, jj, temp : integer;

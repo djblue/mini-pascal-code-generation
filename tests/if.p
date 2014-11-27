@@ -2,6 +2,7 @@ program main;
 
 class main 
 begin
+
   function main;
     var aa : integer;
   begin
@@ -17,5 +18,6 @@ begin
       end;
     print aa
   end
+
 end
 .
