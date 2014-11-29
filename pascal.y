@@ -231,21 +231,7 @@ type_denoter:
       size: $1.size
     };
   }
-| identifier {
-    if ($1 === 'integer' || $1 === 'boolean') {
-      $$ = {
-        type: 'primitive',
-        name: $1,
-        size: 4
-      };
-    } else {
-      $$ = {
-        type: 'class',
-        name: $1,
-        size: syms.getSize($1)
-      };
-    }
-  }
+| identifier { $$ = syms.getDenoter($1); }
 ;
 
 array_type:

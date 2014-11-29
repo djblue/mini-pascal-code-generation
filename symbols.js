@@ -166,5 +166,11 @@ exports.getDenoter = function (name) {
       name: name,
       size: 4
     };
+  } else if (name !== undefined) {
+    return {
+      type: 'class',
+      name: name,
+      size: exports.getSize(name)
+    };
   }
 };
