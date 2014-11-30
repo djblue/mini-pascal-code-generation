@@ -36,15 +36,11 @@
   var regBackup = function () {
     // allocate space on the stack (+1 for $ra)
     mips.comment('backing up registers to the stack')
-    mips.addi($sp, $sp, -4 * (regCount + 2));
+    mips.addi($sp, $sp, -4 * regCount);
     // backup temps
     for (var i = 0; i < regCount; i++) {
       mips.sw('$t'+i, $sp, i*4);
     }
-    // backup $ra and $fp
-    mips.sw($ra, $sp, i*4);
-    i++;
-    mips.sw($fp, $sp, i*4);
 
     regCount = 0;
 
@@ -52,18 +48,15 @@
     return function () {
 
       mips.comment('restoring registers from the stack')
-      regCount = i - 1;
+      regCount = i;
 
-      mips.lw($fp, $sp, i*4);
-      i--;
-      mips.lw($ra, $sp, i*4);
       i--;
       for (; i >= 0; i--) {
         mips.lw('$t'+i, $sp, i*4);
       }
 
       // git back stack
-      mips.addi($sp, $sp, 4 * (regCount + 2));
+      mips.addi($sp, $sp, 4 * regCount);
     };
   };
 
@@ -200,9 +193,14 @@ class_identification:
 class_block:
   variable_declaration_part func_declaration_list {
     $2.forEach(function (func) {
+
       mips.label(func.heading.label);
       var stack = func.heading.getStackSize();
 
+      mips.comment('set activation record');
+      mips.addi($sp, $sp, -12);
+      mips.sw($ra, $sp, 8);
+      mips.sw($fp, $sp, 4);
       mips.mov($fp, $sp);
 
       if (stack !== 0) {
@@ -221,8 +219,11 @@ class_block:
 
       mips.nest(func.block.statements.instructions);
 
-      mips.comment('reset $sp from $fp');
+      mips.comment('reset activation record');
       mips.mov($sp, $fp);
+      mips.lw($fp, $sp, 4);
+      mips.lw($ra, $sp, 8);
+      mips.addi($sp, $sp, 12);
 
       mips.jr();
       if (!printClasses) {
