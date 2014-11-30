@@ -343,7 +343,7 @@ function_heading:
     $3.forEach(function (declaration) {
       declaration.identifiers.forEach(function (id) {
         var offset = method.addParam(id, declaration.denoter);
-        mips.sw('$a' + a, $sp, offset);
+        mips.sw('$a' + a, $fp, -1 * offset - 4);
         a++;
       });
     });
@@ -513,8 +513,8 @@ variable_access:
       } else if (variable.isLocal) {
         var reg = $t();
         mips.comment(reg + ' = addressOf (local:' + $1 + ')');
-        mips.li(reg, variable.offset);
-        mips.add(reg, $sp, reg);
+        mips.li(reg, (-1 * variable.offset) - 4);
+        mips.add(reg, $fp, reg);
         $$ = { register: reg, symbol: $1, denoter: variable.denoter };
       } else if (variable.isInstance) {
         // handle instance vars
@@ -548,7 +548,7 @@ indexed_variable:
     mips.mult($i, $3);
     mips.mflo($i);
 
-    mips.add($1.register, $1.register, $i);
+    mips.sub($1.register, $1.register, $i);
     // release registers
     release($i);
     release($3);
@@ -573,7 +573,7 @@ attribute_designator:
     mips.lw($1.register, $1.register);
     var reg = $t();
     mips.li(reg, variable.offset);
-    mips.add($1.register, $1.register, reg);
+    mips.sub($1.register, $1.register, reg);
     release(reg);
     $$ = { register: $1.register, symbol: $3, denoter: variable.denoter };
   }
