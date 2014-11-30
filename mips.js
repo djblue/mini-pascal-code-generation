@@ -122,3 +122,10 @@ exports.nest = function (instructions) {
     return '    ' + instruction;
   }), '');
 };
+
+
+// label generators
+var whileCount = 0;
+var ifCount = 0;
+exports.$wh = function () { return 'while_' + whileCount++; };
+exports.$if = function () { return 'if_' + ifCount++; };

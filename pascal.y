@@ -1,6 +1,7 @@
 %{
   var mips = require('./mips');
   var syms = require('./symbols');
+  var temp = require('./temp');
 
   // registers
   var $zero = '$0'
@@ -15,57 +16,6 @@
     , $s2 = '$s2' // temp conditional eval register
     , $ra = '$ra'
     ;
-
-  var whileCount = 0;
-  var $wh = function () {
-    return 'while_' + whileCount++;
-  };
-
-  var ifCount = 0;
-  var $if = function () {
-    return 'if_' + ifCount++;
-  };
-
-  var regCount = 0;
-  // get next temporary register available
-  var $t = function () {
-    return '$t' + regCount++;
-  };
-
-  // backup registers to stack
-  var regBackup = function () {
-    // allocate space on the stack (+1 for $ra)
-    mips.comment('backing up registers to the stack')
-    mips.addi($sp, $sp, -4 * regCount);
-    // backup temps
-    for (var i = 0; i < regCount; i++) {
-      mips.sw('$t'+i, $sp, i*4);
-    }
-
-    regCount = 0;
-
-    // unload stack back into registers
-    return function () {
-
-      mips.comment('restoring registers from the stack')
-      regCount = i;
-
-      i--;
-      for (; i >= 0; i--) {
-        mips.lw('$t'+i, $sp, i*4);
-      }
-
-      // git back stack
-      mips.addi($sp, $sp, 4 * regCount);
-    };
-  };
-
-  // release register
-  var release = function (reg) {
-    if (reg.match(/^\$t\d$/)) {
-      regCount--;
-    }
-  };
 
   if (process.argv[3] === '--classes') {
     var printClasses = true;
@@ -155,7 +105,7 @@ program_heading:
       mips.comment('set the frame pointer');
       mips.mov($fp, $sp);
       mips.comment('jump to main method "' + main + '"');
-      var undo = regBackup();
+      var undo = temp.regBackup();
       mips.jal(main);
       undo();
 
@@ -205,10 +155,10 @@ class_block:
 
       if (stack !== 0) {
         mips.comment('allocate stack space (' + stack + ' bytes)');
-        var reg = $t();
+        var reg = temp.$t();
         mips.li(reg, -1 * stack);
         mips.add($sp, $sp, reg);
-        release(reg);
+        temp.release(reg);
       }
 
       if (func.heading.instructions.length === 0) {
@@ -409,8 +359,8 @@ assignment_statement:
       type: 'assign',
       instructions: mips.clear()
     };
-    release($1.register); // for variable_access
-    release($3); // for expression evaluation
+    temp.release($1.register); // for variable_access
+    temp.release($3); // for expression evaluation
   }
 | variable_access ASSIGNMENT object_instantiation {
     var size = syms.getSize($3.name);
@@ -424,15 +374,15 @@ assignment_statement:
       type: 'instantiation',
       instructions: mips.clear()
     };
-    release($1.register); // for variable_access
+    temp.release($1.register); // for variable_access
   }
 ;
 
 while_statement:
   WHILE boolean_expression DO statement {
     mips.comment('while expression');
-    var begin = $wh();
-    var end = $wh();
+    var begin = mips.$wh();
+    var end = mips.$wh();
     mips.label(begin);
     mips.nest($2.instructions);
     mips.beq($2.register, $zero, end);
@@ -449,8 +399,8 @@ while_statement:
 if_statement:
   IF boolean_expression THEN statement ELSE statement {
     mips.comment('if expression');
-    var el = $if();
-    var end = $if();
+    var el = mips.$if();
+    var end = mips.$if();
     mips.nest($2.instructions);
     mips.beq($2.register, $zero, el);
     mips.nest($4.instructions);
@@ -483,7 +433,7 @@ print_statement:
       type: 'print',
       instructions: mips.clear()
     };
-    release($2.register); // for variable access
+    temp.release($2.register); // for variable access
   }
 ;
 
@@ -491,10 +441,10 @@ variable_access:
   identifier {
     if ($1 === 'true' || $1 === 'false') {
       var value = ($1 === 'true')? 1 : 0;
-      var reg = $t();
+      var reg = temp.$t();
       mips.li(reg, value);
       mips.sw(reg, $s1);
-      release(reg);
+      temp.release(reg);
       $$ = {
         register: $s1,
         symbol: $1,
@@ -511,14 +461,14 @@ variable_access:
         mips.comment('setting return value');
         $$ = { register: $v0 };
       } else if (variable.isLocal) {
-        var reg = $t();
+        var reg = temp.$t();
         mips.comment(reg + ' = addressOf (local:' + $1 + ')');
         mips.li(reg, (-1 * variable.offset) - 4);
         mips.add(reg, $fp, reg);
         $$ = { register: reg, symbol: $1, denoter: variable.denoter };
       } else if (variable.isInstance) {
         // handle instance vars
-        var reg = $t();
+        var reg = temp.$t();
         mips.comment(reg + ' = addressOf (instance:' + $1 + ')');
         mips.li(reg, variable.offset);
         mips.add(reg, $s0, reg);
@@ -538,7 +488,7 @@ indexed_variable:
     var unit = denoter.unit;
     var lower = denoter.denoter.range.lower;
     var upper = denoter.denoter.range.upper;
-    var $i = $t();
+    var $i = temp.$t();
     mips.comment($1.symbol + '[' + lower + '..' + upper + '] = ' + unit + ' * $i');
     mips.li($i, unit);
     if (lower !== 0) {
@@ -550,8 +500,8 @@ indexed_variable:
 
     mips.sub($1.register, $1.register, $i);
     // release registers
-    release($i);
-    release($3);
+    temp.release($i);
+    temp.release($3);
 
     $$ = $1;
     $$.denoter = $1.denoter.denoter.denoter;
@@ -571,10 +521,10 @@ attribute_designator:
     var variable = syms.lookup($3, $1.denoter.name);
     mips.comment('dereferencing ' + $1.symbol + '.' + $3);
     mips.lw($1.register, $1.register);
-    var reg = $t();
+    var reg = temp.$t();
     mips.li(reg, variable.offset);
     mips.sub($1.register, $1.register, reg);
-    release(reg);
+    temp.release(reg);
     $$ = { register: $1.register, symbol: $3, denoter: variable.denoter };
   }
 ;
@@ -586,14 +536,14 @@ method_designator:
     $3.params.forEach(function (reg) {
       mips.mov('$a' + a, reg);
       a++;
-      release(reg);
+      temp.release(reg);
     });
     mips.addi($sp, $sp, -4);
     mips.sw($s0, $sp);
     mips.comment('setting this context for ' + $1.denoter.name);
     mips.lw($s0, $1.register);
     // back up registers
-    var undo = regBackup();
+    var undo = temp.regBackup();
     // make call
     var method = syms.getMethod($3.name, $1.denoter.name);
     mips.jal(method.label);
@@ -630,7 +580,7 @@ boolean_expression: expression {
     register: $s2,
     instructions: mips.clear()
   };
-  release($1);
+  temp.release($1);
 };
 
 expression: simple_expression
@@ -662,7 +612,7 @@ expression: simple_expression
         break;
     }
     $$ = $1;
-    release($3);
+    temp.release($3);
   }
 ;
 
@@ -680,7 +630,7 @@ simple_expression: term
         break;
     }
     $$ = $1;
-    release($3);
+    temp.release($3);
   }
 ;
 
@@ -704,7 +654,7 @@ term: factor
         break;
     }
     $$ = $1;
-    release($3);
+    temp.release($3);
   }
 ;
 
@@ -723,7 +673,7 @@ factor:
 primary:
   variable_access {
     if ($1.register === $s1) {
-      var reg = $t();
+      var reg = temp.$t();
       mips.lw(reg, $1.register);
       $$ = reg;
     } else {
@@ -731,7 +681,11 @@ primary:
       $$ = $1.register;
     }
   }
-| unsigned_constant { }
+| unsigned_constant {
+    var reg = temp.$t();
+    mips.li(reg, $1);
+    $$ = reg;
+  }
 | LPAREN expression RPAREN { $$ = $2; }
 | function_designator {
     // set parameters
@@ -739,17 +693,17 @@ primary:
     $1.params.forEach(function (reg) {
       mips.mov('$a' + a, reg);
       a++;
-      release(reg);
+      temp.release(reg);
     });
     // back up registers
-    var undo = regBackup();
+    var undo = temp.regBackup();
     // make call
     var method = syms.getMethod($1.name);
     mips.comment('making function call to ' + $1.name);
     mips.jal(method.label);
     // fix stack frame
     undo();
-    var reg = $t();
+    var reg = temp.$t();
     mips.mov(reg, $v0);
     $$ = reg;
   }
@@ -757,13 +711,7 @@ primary:
   }
 ;
 
-unsigned_constant:
-  unsigned_number {
-    var reg = $t();
-    mips.li(reg, $1);
-    $$ = reg;
-  }
-;
+unsigned_constant: unsigned_number;
 
 unsigned_number: unsigned_integer;
 unsigned_integer: DIGSEQ;
