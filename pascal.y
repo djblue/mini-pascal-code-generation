@@ -198,9 +198,9 @@ class_block:
       var stack = func.heading.getStackSize();
 
       mips.comment('set activation record');
-      mips.addi($sp, $sp, -12);
-      mips.sw($ra, $sp, 8);
-      mips.sw($fp, $sp, 4);
+      mips.addi($sp, $sp, -8);
+      mips.sw($ra, $sp, 4);
+      mips.sw($fp, $sp, 0);
       mips.mov($fp, $sp);
 
       if (stack !== 0) {
@@ -221,9 +221,9 @@ class_block:
 
       mips.comment('reset activation record');
       mips.mov($sp, $fp);
-      mips.lw($fp, $sp, 4);
-      mips.lw($ra, $sp, 8);
-      mips.addi($sp, $sp, 12);
+      mips.lw($fp, $sp, 0);
+      mips.lw($ra, $sp, 4);
+      mips.addi($sp, $sp, 8);
 
       mips.jr();
       if (!printClasses) {
