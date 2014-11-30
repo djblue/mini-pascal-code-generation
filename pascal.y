@@ -7,6 +7,7 @@
 
   // stack pointer
     , $sp = '$sp'
+    , $fp = '$fp'
     , $a0 = '$a0'
     , $v0 = '$v0'
     , $s0 = '$s0' // this context (base address of object)
@@ -35,13 +36,15 @@
   var regBackup = function () {
     // allocate space on the stack (+1 for $ra)
     mips.comment('backing up registers to the stack')
-    mips.addi($sp, $sp, -4 * (regCount + 1));
+    mips.addi($sp, $sp, -4 * (regCount + 2));
     // backup temps
     for (var i = 0; i < regCount; i++) {
       mips.sw('$t'+i, $sp, i*4);
     }
-    // backup $ra
+    // backup $ra and $fp
     mips.sw($ra, $sp, i*4);
+    i++;
+    mips.sw($fp, $sp, i*4);
 
     regCount = 0;
 
@@ -49,8 +52,10 @@
     return function () {
 
       mips.comment('restoring registers from the stack')
-      regCount = i;
+      regCount = i - 1;
 
+      mips.lw($fp, $sp, i*4);
+      i--;
       mips.lw($ra, $sp, i*4);
       i--;
       for (; i >= 0; i--) {
@@ -58,7 +63,7 @@
       }
 
       // git back stack
-      mips.addi($sp, $sp, 4 * (regCount + 1));
+      mips.addi($sp, $sp, 4 * (regCount + 2));
     };
   };
 
@@ -154,8 +159,12 @@ program_heading:
       mips.addi($s1, $sp, 0);
 
       var main = $2 + '_' + $2
+      mips.comment('set the frame pointer');
+      mips.mov($fp, $sp);
       mips.comment('jump to main method "' + main + '"');
+      var undo = regBackup();
       mips.jal(main);
+      undo();
 
       mips.comment('exit program');
       mips.li($v0, 10);
@@ -193,6 +202,9 @@ class_block:
     $2.forEach(function (func) {
       mips.label(func.heading.label);
       var stack = func.heading.getStackSize();
+
+      mips.mov($fp, $sp);
+
       if (stack !== 0) {
         mips.comment('allocate stack space (' + stack + ' bytes)');
         var reg = $t();
@@ -200,6 +212,7 @@ class_block:
         mips.add($sp, $sp, reg);
         release(reg);
       }
+
       if (func.heading.instructions.length === 0) {
         mips.comment('no parameters to load');
       } else {
@@ -207,13 +220,10 @@ class_block:
       }
 
       mips.nest(func.block.statements.instructions);
-      if (stack !== 0) {
-        mips.comment('deallocate stack space (' + stack + ' bytes)');
-        var reg = $t();
-        mips.li(reg, stack);
-        mips.add($sp, $sp, reg);
-        release(reg);
-      }
+
+      mips.comment('reset $sp from $fp');
+      mips.mov($sp, $fp);
+
       mips.jr();
       if (!printClasses) {
         console.log('\n' + mips.clear().join('\n'));
