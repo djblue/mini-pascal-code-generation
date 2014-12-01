@@ -88,8 +88,8 @@ exports.label = function (text) {
 }
 
 exports.comment = function (text) {
-  add('# ' + text);
-}
+  add('nop # ' + text);
+};
 
 exports.syscall = function () {
   add('syscall');
@@ -118,9 +118,19 @@ exports.jr = function () {
 };
 
 exports.nest = function (instructions) {
-  buffer = buffer.concat('', instructions.map(function (instruction) {
-    return '    ' + instruction;
-  }), '');
+  if (instructions !== undefined) {
+    buffer = buffer.concat('', instructions.map(function (instruction) {
+      return '    ' + instruction;
+    }), '');
+  }
+};
+
+exports.adj = function (instructions) {
+  if (instructions !== undefined) {
+    buffer = buffer.concat('', instructions.map(function (instruction) {
+      return instruction;
+    }), '');
+  }
 };
 
 
