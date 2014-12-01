@@ -260,7 +260,8 @@ variable_parameter_specification:
   VAR identifier_list COLON identifier {
     $$ = {
       identifiers: $2,
-      denoter: syms.getDenoter($4)
+      denoter: syms.getDenoter($4),
+      isReference: true
     };
   }
 ;
@@ -282,7 +283,7 @@ function_heading:
     var method = $$ = syms.addMethod($2, $5);
     $3.forEach(function (declaration) {
       declaration.identifiers.forEach(function (id) {
-        method.addParam(id, declaration.denoter);
+        method.addParam(id, declaration.denoter, declaration.isReference);
       });
     });
   }
@@ -441,11 +442,7 @@ variable_access:
       $$ = {
         register: $s1,
         symbol: $1,
-        denoter: {
-          type: 'primitive',
-          name: 'boolean',
-          size: 4
-        }
+        denoter: syms.getDenoter('boolean')
       };
     } else {
       var variable = syms.lookup($1);
@@ -457,6 +454,13 @@ variable_access:
         mips.comment(reg + ' = addressOf (param:' + $1 + ')');
         mips.li(reg, 8 + variable.offset);
         mips.add(reg, reg, $fp);
+        $$ = { register: reg, symbol: $1, denoter: variable.denoter, instructions: mips.clear() };
+      } else if (variable.isParam && variable.isReference) {
+        var reg = temp.$t();
+        mips.comment(reg + ' = &addressOf (param:' + $1 + ')');
+        mips.li(reg, 8 + variable.offset);
+        mips.add(reg, reg, $fp);
+        mips.lw(reg, reg);
         $$ = { register: reg, symbol: $1, denoter: variable.denoter, instructions: mips.clear() };
       } else if (variable.isLocal) {
         var reg = temp.$t();
@@ -737,19 +741,27 @@ primary:
   }
 | function_designator {
 
+    var method = syms.getMethod($1.name);
+
     var undo = temp.regBackup();
 
     mips.comment('allocating params + (' + 4 * $1.params.length + ' bytes)');
     mips.addi($sp, $sp, -4 * $1.params.length);
 
+
+    var params = method.getParams();
+
     $1.params.forEach(function (param, i) {
+      if (params[i].isReference) {
+        // pop the dereference operation
+        param.instructions.pop();
+      }
       mips.comment('loading param: ' + $1.name + '[' + i + ']');
       mips.nest(param.instructions);
       mips.sw(param.register, $sp, 4*i);
     });
 
     // make call
-    var method = syms.getMethod($1.name);
     mips.comment('making function call to ' + $1.name);
     mips.jal(method.label);
 

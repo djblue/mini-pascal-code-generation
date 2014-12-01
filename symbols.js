@@ -87,6 +87,13 @@ exports.addMethod = function (name, denoterId) {
     },
     addInstructions: function (instList) {
       this.instructions = instList;
+    },
+    getParams: function () {
+      return Object.keys(this.params).map(function (key) {
+        return this.params[key];
+      }.bind(this)).sort(function (param) {
+        return param.offset;
+      });
     }
   };
 
