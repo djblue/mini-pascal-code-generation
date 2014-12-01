@@ -105,9 +105,7 @@ program_heading:
       mips.comment('set the frame pointer');
       mips.mov($fp, $sp);
       mips.comment('jump to main method "' + main + '"');
-      var undo = temp.regBackup();
       mips.jal(main);
-      undo();
 
       mips.comment('exit program');
       mips.li($v0, 10);
@@ -159,12 +157,6 @@ class_block:
         mips.li(reg, -1 * stack);
         mips.add($sp, $sp, reg);
         temp.release(reg);
-      }
-
-      if (func.heading.instructions.length === 0) {
-        mips.comment('no parameters to load');
-      } else {
-        mips.nest(func.heading.instructions);
       }
 
       mips.nest(func.block.statements.instructions);
@@ -288,16 +280,11 @@ function_heading:
   }
 | FUNCTION identifier formal_parameter_list COLON result_type {
     var method = $$ = syms.addMethod($2, $5);
-    var a = 0;
-    mips.comment('loading parameters for ' + $2);
     $3.forEach(function (declaration) {
       declaration.identifiers.forEach(function (id) {
-        var offset = method.addParam(id, declaration.denoter);
-        mips.sw('$a' + a, $fp, -1 * offset - 4);
-        a++;
+        method.addParam(id, declaration.denoter);
       });
     });
-    method.addInstructions(mips.clear());
   }
 ;
 
@@ -348,6 +335,9 @@ statement:
 
 assignment_statement:
   variable_access ASSIGNMENT expression {
+    var expr = mips.clear();
+    mips.adj($1.instructions);
+    mips.adj(expr);
     if ($1.register === $v0) {
       mips.comment('setting return value');
       mips.mov($v0, $3);
@@ -363,6 +353,7 @@ assignment_statement:
     temp.release($3); // for expression evaluation
   }
 | variable_access ASSIGNMENT object_instantiation {
+    mips.adj($1.instructions);
     var size = syms.getSize($3.name);
     // allocate memory on the heap
     mips.comment('allocating memory: ' + ' sizeof(' + $3.name + ') = ' + size);
@@ -422,6 +413,7 @@ object_instantiation:
 
 print_statement:
   PRINT variable_access {
+    mips.adj($2.instructions);
     mips.comment('printing: ' + $2.symbol);
     mips.addi($v0, $zero, 1);
     mips.lw($a0, $2.register);
@@ -458,21 +450,26 @@ variable_access:
       var variable = syms.lookup($1);
       // trying to assign to a function name
       if (variable.isResult) {
-        mips.comment('setting return value');
-        $$ = { register: $v0 };
+        $$ = { register: $v0, instructions: mips.clear() };
+      } else if (variable.isParam && variable.isValue) {
+        var reg = temp.$t();
+        mips.comment(reg + ' = addressOf (param:' + $1 + ')');
+        mips.li(reg, 8 + variable.offset);
+        mips.add(reg, reg, $fp);
+        $$ = { register: reg, symbol: $1, denoter: variable.denoter, instructions: mips.clear() };
       } else if (variable.isLocal) {
         var reg = temp.$t();
         mips.comment(reg + ' = addressOf (local:' + $1 + ')');
         mips.li(reg, (-1 * variable.offset) - 4);
         mips.add(reg, $fp, reg);
-        $$ = { register: reg, symbol: $1, denoter: variable.denoter };
+        $$ = { register: reg, symbol: $1, denoter: variable.denoter, instructions: mips.clear() };
       } else if (variable.isInstance) {
         // handle instance vars
         var reg = temp.$t();
         mips.comment(reg + ' = addressOf (instance:' + $1 + ')');
         mips.li(reg, variable.offset);
         mips.add(reg, $s0, reg);
-        $$ = { register: reg, symbol: $1, denoter: variable.denoter };
+        $$ = { register: reg, symbol: $1, denoter: variable.denoter, instructions: mips.clear() };
       }
     }
   }
@@ -483,6 +480,10 @@ variable_access:
 
 indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
+
+    var expr = mips.clear();
+    mips.adj($1.instructions);
+    mips.adj(expr);
 
     var denoter = $1.denoter;
     var unit = denoter.unit;
@@ -505,6 +506,7 @@ indexed_variable:
 
     $$ = $1;
     $$.denoter = $1.denoter.denoter.denoter;
+    $$.instructions = mips.clear();
   }
 ;
 
@@ -518,6 +520,9 @@ index_expression: expression { } ;
 
 attribute_designator:
   variable_access DOT identifier {
+
+    mips.adj($1.instructions);
+
     var variable = syms.lookup($3, $1.denoter.name);
     mips.comment('dereferencing ' + $1.symbol + '.' + $3);
     mips.lw($1.register, $1.register);
@@ -525,35 +530,36 @@ attribute_designator:
     mips.li(reg, variable.offset);
     mips.sub($1.register, $1.register, reg);
     temp.release(reg);
-    $$ = { register: $1.register, symbol: $3, denoter: variable.denoter };
+    $$ = {
+      register: $1.register,
+      symbol: $3,
+      denoter: variable.denoter,
+      instructions: mips.clear()
+    };
   }
 ;
 
 method_designator:
   variable_access DOT function_designator {
-    mips.comment('setting parameters for method call');
-    var a = 0;
-    $3.params.forEach(function (reg) {
-      mips.mov('$a' + a, reg);
-      a++;
-      temp.release(reg);
-    });
+
+    mips.adj($1.instructions);
+
     mips.addi($sp, $sp, -4);
     mips.sw($s0, $sp);
     mips.comment('setting this context for ' + $1.denoter.name);
     mips.lw($s0, $1.register);
     // back up registers
-    var undo = temp.regBackup();
+    //var undo = temp.regBackup();
     // make call
     var method = syms.getMethod($3.name, $1.denoter.name);
     mips.jal(method.label);
     // fix stack frame
-    undo();
+    //undo();
     mips.lw($s0, $sp);
     mips.addi($sp, $sp, 4);
     mips.comment('saving $v0 into temp var');
     mips.sw($v0, $s1);
-    $$ = { register: $s1, symbol: $3.name, denoter: method.denoter };
+    $$ = { register: $s1, symbol: $3.name, denoter: method.denoter, instructions: mips.clear() };
   }
 ;
 
@@ -563,12 +569,18 @@ actual_parameter_list:
   actual_parameter_list COMMA actual_parameter {
     $$ = $1.concat($3);
   }
-| actual_parameter { $$ = [$1]; }
+| actual_parameter { $$ = [$1] }
 | { $$ = []; }
 ;
 
 actual_parameter:
-  expression { }
+  expression {
+    temp.release($1);
+    $$ = {
+      register: $1,
+      instructions: mips.clear()
+    };
+  }
 | expression COLON expression { }
 | expression COLON expression COLON expression { }
 ;
@@ -672,6 +684,9 @@ factor:
 
 primary:
   variable_access {
+
+    mips.adj($1.instructions);
+
     if ($1.register === $s1) {
       var reg = temp.$t();
       mips.lw(reg, $1.register);
@@ -688,21 +703,26 @@ primary:
   }
 | LPAREN expression RPAREN { $$ = $2; }
 | function_designator {
-    // set parameters
-    var a = 0;
-    $1.params.forEach(function (reg) {
-      mips.mov('$a' + a, reg);
-      a++;
-      temp.release(reg);
-    });
-    // back up registers
+
     var undo = temp.regBackup();
+
+    mips.comment('allocating space for params + (' + 4 * $1.params.length + ' bytes)');
+    mips.addi($sp, $sp, -4 * $1.params.length);
+
+    $1.params.forEach(function (param, i) {
+      mips.adj(param.instructions);
+      mips.sw(param.register, $sp, 4*i);
+    });
+
     // make call
     var method = syms.getMethod($1.name);
     mips.comment('making function call to ' + $1.name);
     mips.jal(method.label);
-    // fix stack frame
+
+    mips.addi($sp, $sp, 4 * $1.params.length);
+
     undo();
+
     var reg = temp.$t();
     mips.mov(reg, $v0);
     $$ = reg;

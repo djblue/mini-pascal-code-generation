@@ -62,6 +62,7 @@ exports.addMethod = function (name, denoterId) {
   fn = cl.funcs[name] = {
     name: name,
     params: {},
+    paramsOffset: 0,
     denoter: exports.getDenoter(denoterId),
     vars: {},
     label: cl.name + '_' + name,
@@ -70,15 +71,19 @@ exports.addMethod = function (name, denoterId) {
     getStackSize: function () {
       return this.size;
     },
-    addParam: function (name, denoter) {
-      var offset = this.size;
+    addParam: function (name, denoter, reference) {
+      var offset = this.paramsOffset;
       var param = this.params[name] = {};
       param.name = name;
       param.denoter = _.clone(denoter);
       param.offset = offset;
-      param.isLocal = true;
-      fn.size += denoter.size;
-      return offset;
+      param.isParam = true;
+      if (reference !== undefined) {
+        param.isReference = true;
+      } else {
+        param.isValue = true;
+      }
+      fn.paramsOffset += denoter.size;
     },
     addInstructions: function (instList) {
       this.instructions = instList;

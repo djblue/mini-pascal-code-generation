@@ -127,9 +127,9 @@ exports.nest = function (instructions) {
 
 exports.adj = function (instructions) {
   if (instructions !== undefined) {
-    buffer = buffer.concat('', instructions.map(function (instruction) {
+    buffer = buffer.concat(instructions.map(function (instruction) {
       return instruction;
-    }), '');
+    }));
   }
 };
 
