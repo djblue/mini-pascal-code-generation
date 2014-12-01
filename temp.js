@@ -30,28 +30,28 @@ exports.$t = function () {
 // backup registers to stack
 exports.regBackup = function () {
   // allocate space on the stack (+1 for $ra)
-  mips.comment('backing up registers to the stack')
-  mips.addi($sp, $sp, -4 * regCount);
-  // backup temps
-  for (var i = 0; i < regCount; i++) {
-    mips.sw('$t'+i, $sp, i*4);
+  if (regCount > 0) {
+    mips.comment('backing up registers to the stack')
+    mips.addi($sp, $sp, -4 * regCount);
+    // backup temps
+    for (var i = 0; i < regCount; i++) {
+      mips.sw('$t'+i, $sp, i*4);
+    }
+    regCount = 0;
   }
-
-  regCount = 0;
 
   // unload stack back into registers
   return function () {
 
-    mips.comment('restoring registers from the stack')
-    regCount = i;
-
-    i--;
-    for (; i >= 0; i--) {
-      mips.lw('$t'+i, $sp, i*4);
+    if (i > 0) {
+      regCount = i;
+      mips.comment('restoring registers from the stack')
+      i--;
+      for (; i >= 0; i--) {
+        mips.lw('$t'+i, $sp, i*4);
+      }
+      mips.addi($sp, $sp, 4 * regCount);
     }
-
-    // git back stack
-    mips.addi($sp, $sp, 4 * regCount);
   };
 };
 

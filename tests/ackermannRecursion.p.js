@@ -22,4 +22,4 @@ expect(output.main.funcs.ackermann, 'ackerman function');
 
 var a = output.main.funcs.ackermann;
 expect(keys(a.params) === 2, 'ackermann has two params');
-expect(a.size === 8, 'offset vars correctly')
+expect(a.size === 0, 'offset vars correctly')

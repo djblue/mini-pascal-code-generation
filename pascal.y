@@ -335,22 +335,23 @@ statement:
 
 assignment_statement:
   variable_access ASSIGNMENT expression {
-    var expr = mips.clear();
+
     mips.adj($1.instructions);
-    mips.adj(expr);
+    mips.adj($3.instructions);
+
     if ($1.register === $v0) {
       mips.comment('setting return value');
-      mips.mov($v0, $3);
+      mips.mov($v0, $3.register);
     } else {
-      mips.comment('assign expression: ' + $1.symbol + ' = ' + $3);
-      mips.sw($3 , $1.register);
+      mips.comment('assign expression: ' + $1.symbol + ' = ' + $3.register);
+      mips.sw($3.register , $1.register);
     }
     $$ = {
       type: 'assign',
       instructions: mips.clear()
     };
     temp.release($1.register); // for variable_access
-    temp.release($3); // for expression evaluation
+    temp.release($3.register); // for expression evaluation
   }
 | variable_access ASSIGNMENT object_instantiation {
     mips.adj($1.instructions);
@@ -415,8 +416,8 @@ print_statement:
   PRINT variable_access {
     mips.adj($2.instructions);
     mips.comment('printing: ' + $2.symbol);
-    mips.addi($v0, $zero, 1);
     mips.lw($a0, $2.register);
+    mips.addi($v0, $zero, 1);
     mips.syscall();
     mips.addi($a0, $zero, '0xA');
     mips.addi($v0, $zero, '0xB');
@@ -481,9 +482,8 @@ variable_access:
 indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
 
-    var expr = mips.clear();
     mips.adj($1.instructions);
-    mips.adj(expr);
+    mips.adj($3.instructions);
 
     var denoter = $1.denoter;
     var unit = denoter.unit;
@@ -493,16 +493,16 @@ indexed_variable:
     mips.comment($1.symbol + '[' + lower + '..' + upper + '] = ' + unit + ' * $i');
     mips.li($i, unit);
     if (lower !== 0) {
-      mips.addi($3, $3, -1*lower);
+      mips.addi($3.register, $3.register, -1*lower);
     }
 
-    mips.mult($i, $3);
+    mips.mult($i, $3.register);
     mips.mflo($i);
 
     mips.sub($1.register, $1.register, $i);
     // release registers
     temp.release($i);
-    temp.release($3);
+    temp.release($3.register);
 
     $$ = $1;
     $$.denoter = $1.denoter.denoter.denoter;
@@ -544,22 +544,42 @@ method_designator:
 
     mips.adj($1.instructions);
 
+    var undo = temp.regBackup();
+
     mips.addi($sp, $sp, -4);
     mips.sw($s0, $sp);
+
     mips.comment('setting this context for ' + $1.denoter.name);
     mips.lw($s0, $1.register);
-    // back up registers
-    //var undo = temp.regBackup();
-    // make call
+
+    mips.comment('allocating space for params + (' + 4 * $3.params.length + ' bytes)');
+    mips.addi($sp, $sp, -4 * $3.params.length);
+
+    $3.params.forEach(function (param, i) {
+      mips.adj(param.instructions);
+      mips.sw(param.register, $sp, 4*i);
+    });
+
+    mips.comment('making method call to ' + $3.name);
     var method = syms.getMethod($3.name, $1.denoter.name);
     mips.jal(method.label);
-    // fix stack frame
-    //undo();
+
+    mips.addi($sp, $sp, 4 * $3.params.length);
+
     mips.lw($s0, $sp);
     mips.addi($sp, $sp, 4);
+
+    undo();
+
     mips.comment('saving $v0 into temp var');
     mips.sw($v0, $s1);
-    $$ = { register: $s1, symbol: $3.name, denoter: method.denoter, instructions: mips.clear() };
+
+    $$ = {
+      register: $s1,
+      symbol: $3.name,
+      denoter: method.denoter,
+      instructions: mips.clear()
+    };
   }
 ;
 
@@ -575,10 +595,10 @@ actual_parameter_list:
 
 actual_parameter:
   expression {
-    temp.release($1);
+    temp.release($1.register);
     $$ = {
-      register: $1,
-      instructions: mips.clear()
+      register: $1.register,
+      instructions: $1.instructions
     };
   }
 | expression COLON expression { }
@@ -586,16 +606,23 @@ actual_parameter:
 ;
 
 boolean_expression: expression {
-  mips.mov($s2, $1);
+  mips.adj($1.instructions);
+  mips.mov($s2, $1.register);
   $$ = {
     type: 'boolean',
     register: $s2,
     instructions: mips.clear()
   };
-  temp.release($1);
+  temp.release($1.register);
 };
 
-expression: simple_expression
+expression:
+  simple_expression {
+    $$ = {
+      register: $1,
+      instructions: mips.clear()
+    };
+  }
 | simple_expression relop simple_expression {
     switch ($2) {
       case '=':
@@ -623,8 +650,11 @@ expression: simple_expression
         mips.sle($1, $3, $1);
         break;
     }
-    $$ = $1;
     temp.release($3);
+    $$ = {
+      register: $1,
+      instructions: mips.clear()
+    };
   }
 ;
 
@@ -701,16 +731,20 @@ primary:
     mips.li(reg, $1);
     $$ = reg;
   }
-| LPAREN expression RPAREN { $$ = $2; }
+| LPAREN expression RPAREN {
+    mips.adj($2.instructions);
+    $$ = $2.register;
+  }
 | function_designator {
 
     var undo = temp.regBackup();
 
-    mips.comment('allocating space for params + (' + 4 * $1.params.length + ' bytes)');
+    mips.comment('allocating params + (' + 4 * $1.params.length + ' bytes)');
     mips.addi($sp, $sp, -4 * $1.params.length);
 
     $1.params.forEach(function (param, i) {
-      mips.adj(param.instructions);
+      mips.comment('loading param: ' + $1.name + '[' + i + ']');
+      mips.nest(param.instructions);
       mips.sw(param.register, $sp, 4*i);
     });
 
