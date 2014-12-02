@@ -148,7 +148,7 @@ exports.getSize = function (name) {
 // name - name of variable to look up
 // klass - optional class name, if provided
 //  will look up "name" in class.
-exports.lookup = function (name, klass) {
+exports.lookup = function lookup (name, klass) {
   // name is current function name
   if (fn !== null && name === fn.name) {
     return {
@@ -158,11 +158,10 @@ exports.lookup = function (name, klass) {
     };
   // search parent for fields
   } else if (klass !== undefined) {
-    klass = classes[klass];
-    return klass.vars[name] ||
-      exports.lookup(name, klass.parent);
+    c = classes[klass];
+    return c.vars[name] || ((c.parent)? lookup(name, c.parent) : undefined);
   } else {
-    return fn.params[name] || fn.vars[name] || cl.vars[name];
+    return fn.params[name] || fn.vars[name] || lookup(name, cl.name);
   }
 };
 
