@@ -19,15 +19,29 @@ begin
 
 end
 
+class account
+begin
+  var userId, balance : integer;
+      critical : boolean;
+  function printAccount : integer;
+  begin
+    print userId;
+    print balance;
+    print critical;
+    printAccount := 0
+  end
+end
 
 class myNode extends node
 begin
 
   var data : integer;
+      account : account;
 
-  function myNode (aa : integer) : myNode;
+  function myNode (aa : integer; var account : account) : myNode;
   begin
     data := aa;
+    this.account := account;
     myNode := this
   end
 
@@ -37,21 +51,39 @@ end
 class myList extends list
 begin
 
+  var accountCount : integer;
+
+  function myList;
+  begin
+    accountCount := 256
+  end;
+
   function pushMyNode (aa : integer) : myList;
     var temp : myNode;
         null : node;
+        newAccount : account;
   begin
-    temp := new myNode(aa);
+    newAccount := new account;
+
+    newAccount.userId := accountCount;
+    newAccount.balance := 0;
+    newAccount.critical := true;
+
+    accountCount := accountCount + 1;
+
+    temp := new myNode(aa, newAccount);
     pushMyNode := push(temp)
   end;
 
   function printList;
     var temp : myNode;
+        null : integer;
   begin
     temp := head;
     while temp <> 0 do
     begin
       print temp.data;
+      null := temp.account.printAccount();
       temp := temp.next
     end
   end
