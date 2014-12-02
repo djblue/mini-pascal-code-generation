@@ -103,14 +103,11 @@ exports.addMethod = function (name, denoterId) {
 // find a method by name
 // name - name of method to lookup
 // klass - the name of the class to search through
-exports.getMethod = function (name, klass) {
-  if (klass !== undefined) {
-    return classes[klass].funcs[name] ||
-      exports.getMethod(name, classes[klass].parent);
-  } else {
-    return cl.funcs[name] ||
-      exports.getMethod(name, cl.parent);
-  }
+exports.getMethod = function getMethod (name, klass) {
+  var c = cl; // set class to current class
+  if (klass !== undefined) c = classes[klass];
+  return c.funcs[name] ||
+    ((c.parent !== undefined)? getMethod(name, c.parent) : undefined);
 };
 
 // add a new class to the classes list
@@ -186,3 +183,6 @@ exports.getDenoter = function (name) {
     };
   }
 };
+
+// get the current class, useful for this reference
+exports.getCurrentClass = function () { return cl; };

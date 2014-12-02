@@ -360,9 +360,9 @@ assignment_statement:
   }
 | variable_access ASSIGNMENT object_instantiation {
 
-    var inst = mips('instantiation')
-      , size = syms.getSize($3.name)
-      ;
+    var inst = mips('instantiation');
+    var size = syms.getSize($3.name);
+    var method = syms.getMethod($3.name, $3.name);
 
     inst
       .concat($1)
@@ -376,6 +376,47 @@ assignment_statement:
       ;
 
     temp.release($1.register, inst); // for variable_access
+
+    // class has a constructor (call constructor)
+    if (method !== undefined) {
+
+      var params = method.getParams();
+
+      inst
+        .add($sp, $sp, -4)
+        .sw($s0, $sp)
+        .mov($s0, $v0)
+        ;
+
+      if ($3.params.length > 0) {
+        inst
+          .comment('allocating space for params + (' + 4 * $3.params.length + ' bytes)')
+          .addi($sp, $sp, -4 * $3.params.length)
+          ;
+      }
+
+      $3.params.forEach(function (param, i) {
+        // pop the dereference operation
+        if (params[i].isReference) {
+          param.pop();
+        }
+        inst.nest(param).sw(param, $sp, 4*i);
+      });
+
+      inst
+        .comment('making constructor call to ' + $3.name)
+        .jal(method.label)
+        ;
+
+      if ($3.params.length > 0) {
+        inst.addi($sp, $sp, 4 * $3.params.length)
+      }
+
+      inst
+        .lw($s0, $sp)
+        .add($sp, $sp, 4)
+        ;
+    }
 
     $$ = inst;
   }
@@ -463,6 +504,14 @@ variable_access:
       inst.denoter = syms.getDenoter('boolean');
       inst.li(reg, ($1 === 'true')? 1 : 0).sw(reg, $s1);
       temp.release(reg, inst);
+
+    } else if ($1 === 'this') {
+
+      var reg = temp.$t(inst);
+      inst.register = reg;
+      var cl = syms.getCurrentClass();
+      inst.denoter = syms.getDenoter(cl.name);
+      inst.sw($s0, $s1).mov(reg, $s1);
 
     } else {
 
@@ -578,7 +627,7 @@ attribute_designator:
       .comment('dereferencing ' + $1.symbol + '.' + $3)
       .lw($1, $1)
       .li(reg, variable.offset)
-      .sub($1, $1, reg)
+      .add($1, $1, reg)
       ;
 
     temp.release(reg, inst);
