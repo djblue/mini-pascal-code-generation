@@ -23,7 +23,7 @@ The following language features are supported. The grammar is defined in the
 - if-else
 - while
 - assignment
-- object instantiation
+- object instantiation - no gc or delete :)
 
 ### Functions
 
@@ -35,13 +35,15 @@ The following language features are supported. The grammar is defined in the
 
 ### Classes
 
+- constructor initialization (optional)
 - inherited fields
 - inherited methods
 - method calls
 
 ### Expressions
 
-- literals (numbers, this, true false)
+- literals (numbers, this, true, false)
+- function calls
 - nested function calls
 - logical (not, and, or)
 - arithmetic (+, -, \*, /, mod)
@@ -49,8 +51,8 @@ The following language features are supported. The grammar is defined in the
 
 # Stack Frame
 
-The generated mips codes setups up the following stack frame for all function
-calls.
+The generated mips codes sets up the following stack frame for all
+function/method calls.
 
 ```
           |            |
