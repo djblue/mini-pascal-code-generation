@@ -1,7 +1,7 @@
 %{
-  var mips = require('./mips');
   var syms = require('./symbols');
   var temp = require('./temp');
+  var mips = require('./mips');
 
   // registers
   var $zero = '$0'
@@ -96,22 +96,26 @@ program_heading:
   PROGRAM identifier {
     if (!printClasses) {
 
-      mips.label('main');
-      mips.comment('allocate global temp var');
-      mips.addi($sp, $sp, -4);
-      mips.addi($s1, $sp, 0);
+      var main = $2 + '_' + $2;
+      var inst = mips('program');
 
-      var main = $2 + '_' + $2
-      mips.comment('set the frame pointer');
-      mips.mov($fp, $sp);
-      mips.comment('jump to main method "' + main + '"');
-      mips.jal(main);
+      inst
+        .label('main')
+        .comment('allocate global temp var')
+        .addi($sp, $sp, -4)
+        .addi($s1, $sp, 0)
 
-      mips.comment('exit program');
-      mips.li($v0, 10);
-      mips.syscall();
+        .comment('set the frame pointer')
+        .mov($fp, $sp)
+        .comment('jump to main method "' + main + '"')
+        .jal(main)
 
-      console.log(mips.clear().join('\n'))
+        .comment('exit program')
+        .li($v0, 10)
+        .syscall()
+        ;
+
+      inst.print();
     }
   }
 | PROGRAM identifier LPAREN identifier_list RPAREN {
@@ -142,35 +146,42 @@ class_block:
   variable_declaration_part func_declaration_list {
     $2.forEach(function (func) {
 
-      mips.label(func.heading.label);
       var stack = func.heading.getStackSize();
 
-      mips.comment('set activation record');
-      mips.addi($sp, $sp, -8);
-      mips.sw($ra, $sp, 4);
-      mips.sw($fp, $sp, 0);
-      mips.mov($fp, $sp);
+      var inst = mips();
+
+      inst
+        .label(func.heading.label)
+        .comment('set activation record')
+        .addi($sp, $sp, -8)
+        .sw($ra, $sp, 4)
+        .sw($fp, $sp, 0)
+        .mov($fp, $sp)
+        ;
 
       if (stack !== 0) {
-        mips.comment('allocate stack space (' + stack + ' bytes)');
-        var reg = temp.$t();
-        mips.li(reg, -1 * stack);
-        mips.add($sp, $sp, reg);
-        temp.release(reg);
+        var reg = temp.$t(inst);
+
+        inst
+          .comment('allocate stack space (' + stack + ' bytes)')
+          .li(reg, -1 * stack)
+          .add($sp, $sp, reg)
+          ;
+
+        temp.release(reg, inst);
       }
 
-      mips.nest(func.block.statements.instructions);
+      inst
+        .nest(func.block.statements)
+        .comment('reset activation record')
+        .mov($sp, $fp)
+        .lw($fp, $sp, 0)
+        .lw($ra, $sp, 4)
+        .addi($sp, $sp, 8)
+        .jr()
+        ;
 
-      mips.comment('reset activation record');
-      mips.mov($sp, $fp);
-      mips.lw($fp, $sp, 0);
-      mips.lw($ra, $sp, 4);
-      mips.addi($sp, $sp, 8);
-
-      mips.jr();
-      if (!printClasses) {
-        console.log('\n' + mips.clear().join('\n'));
-      }
+      if (!printClasses) inst.print();
     });
   }
 ;
@@ -313,16 +324,10 @@ compound_statement:
 
 statement_sequence:
   statement {
-    $$ = {
-      type: 'sequence',
-      instructions: $1.instructions || []
-    };
+    $$ = mips('sequence').concat($1);
   }
 | statement_sequence SEMICOLON statement {
-    $$ = {
-      type: 'sequence',
-      instructions: $1.instructions.concat($3.instructions)
-    };
+    $$ = mips('sequence').concat($1).concat($3);
   }
 ;
 
@@ -337,74 +342,87 @@ statement:
 assignment_statement:
   variable_access ASSIGNMENT expression {
 
-    mips.adj($1.instructions);
-    mips.adj($3.instructions);
+    var inst = mips('assign').concat($1).concat($3);
 
     if ($1.register === $v0) {
-      mips.comment('setting return value');
-      mips.mov($v0, $3.register);
+      inst.comment('setting return value').mov($v0, $3);
     } else {
-      mips.comment('assign expression: ' + $1.symbol + ' = ' + $3.register);
-      mips.sw($3.register , $1.register);
+      inst
+        .comment('assign expression: ' + $1.symbol + ' = ' + $3.register)
+        .sw($3, $1)
+        ;
     }
-    $$ = {
-      type: 'assign',
-      instructions: mips.clear()
-    };
-    temp.release($1.register); // for variable_access
-    temp.release($3.register); // for expression evaluation
+
+    temp.release($1.register, inst); // for variable_access
+    temp.release($3.register, inst); // for expression evaluation
+
+    $$ = inst;
   }
 | variable_access ASSIGNMENT object_instantiation {
-    mips.adj($1.instructions);
-    var size = syms.getSize($3.name);
-    // allocate memory on the heap
-    mips.comment('allocating memory: ' + ' sizeof(' + $3.name + ') = ' + size);
-    mips.li($v0, 9);
-    mips.li($a0, size); // how many bytes to allocate
-    mips.syscall();
-    mips.sw($v0, $1.register);
-    $$ = {
-      type: 'instantiation',
-      instructions: mips.clear()
-    };
-    temp.release($1.register); // for variable_access
+
+    var inst = mips('instantiation')
+      , size = syms.getSize($3.name)
+      ;
+
+    inst
+      .concat($1)
+      // allocate memory on the heap
+      .comment('allocating memory: ' + ' sizeof(' + $3.name + ') = ' + size)
+      .li($v0, 9)
+      // how many bytes to allocate
+      .li($a0, size)
+      .syscall()
+      .sw($v0, $1)
+      ;
+
+    temp.release($1.register, inst); // for variable_access
+
+    $$ = inst;
   }
 ;
 
 while_statement:
   WHILE boolean_expression DO statement {
-    mips.comment('while expression');
-    var begin = mips.$wh();
-    var end = mips.$wh();
-    mips.label(begin);
-    mips.nest($2.instructions);
-    mips.beq($2.register, $zero, end);
-    mips.nest($4.instructions)
-    mips.j(begin);
-    mips.label(end);
-    $$ = {
-      type: 'while',
-      instructions: mips.clear()
-    };
+    
+    var inst = mips('while')
+      , begin = inst.$wh()
+      , end = inst.$wh()
+      ;
+
+    inst
+      .comment('while expression')
+      .label(begin)
+      .nest($2)
+      .beq($2, $zero, end)
+      .nest($4)
+      .j(begin)
+      .label(end)
+      ;
+
+    $$ = inst;
   }
 ;
 
 if_statement:
   IF boolean_expression THEN statement ELSE statement {
-    mips.comment('if expression');
-    var el = mips.$if();
-    var end = mips.$if();
-    mips.nest($2.instructions);
-    mips.beq($2.register, $zero, el);
-    mips.nest($4.instructions);
-    mips.j(end);
-    mips.label(el);
-    mips.nest($6.instructions);
-    mips.label(end);
-    $$ = {
-      type: 'if',
-      instructions: mips.clear()
-    };
+
+    var inst = mips('if')
+      , el = inst.$if()
+      , end = inst.$if()
+      ;
+
+    inst
+      .comment('if expression')
+      .nest($2)
+      .beq($2, $zero, el)
+      .nest($4)
+      .j(end)
+      .label(el)
+      .nest($6)
+      .label(end)
+      ;
+
+    $$ = inst;
   }
 ;
 
@@ -415,68 +433,83 @@ object_instantiation:
 
 print_statement:
   PRINT variable_access {
-    mips.adj($2.instructions);
-    mips.comment('printing: ' + $2.symbol);
-    mips.lw($a0, $2.register);
-    mips.addi($v0, $zero, 1);
-    mips.syscall();
-    mips.addi($a0, $zero, '0xA');
-    mips.addi($v0, $zero, '0xB');
-    mips.syscall();
-    $$ = {
-      type: 'print',
-      instructions: mips.clear()
-    };
-    temp.release($2.register); // for variable access
+    var inst = mips('print');
+    inst
+      .concat($2)
+      .comment('printing: ' + $2.symbol)
+      .lw($a0, $2)
+      .addi($v0, $zero, 1)
+      .syscall()
+      .addi($a0, $zero, '0xA')
+      .addi($v0, $zero, '0xB')
+      .syscall()
+      ;
+
+    temp.release($2.register, inst); // for variable access
+    $$ = inst;
   }
 ;
 
 variable_access:
   identifier {
+
+    var inst = mips('variable');
+
+    inst.symbol = $1;
+
     if ($1 === 'true' || $1 === 'false') {
-      var value = ($1 === 'true')? 1 : 0;
-      var reg = temp.$t();
-      mips.li(reg, value);
-      mips.sw(reg, $s1);
-      temp.release(reg);
-      $$ = {
-        register: $s1,
-        symbol: $1,
-        denoter: syms.getDenoter('boolean')
-      };
+      var reg = temp.$t(inst);
+      inst.register = $s1;
+      inst.denoter = syms.getDenoter('boolean');
+      inst.li(reg, ($1 === 'true')? 1 : 0).sw(reg, $s1);
+      temp.release(reg, inst);
+
     } else {
+
       var variable = syms.lookup($1);
+      inst.denoter = variable.denoter;
+      inst.symbol = $1;
+
       // trying to assign to a function name
       if (variable.isResult) {
-        $$ = { register: $v0, instructions: mips.clear() };
-      } else if (variable.isParam && variable.isValue) {
-        var reg = temp.$t();
-        mips.comment(reg + ' = addressOf (param:' + $1 + ')');
-        mips.li(reg, 8 + variable.offset);
-        mips.add(reg, reg, $fp);
-        $$ = { register: reg, symbol: $1, denoter: variable.denoter, instructions: mips.clear() };
-      } else if (variable.isParam && variable.isReference) {
-        var reg = temp.$t();
-        mips.comment(reg + ' = &addressOf (param:' + $1 + ')');
-        mips.li(reg, 8 + variable.offset);
-        mips.add(reg, reg, $fp);
-        mips.lw(reg, reg);
-        $$ = { register: reg, symbol: $1, denoter: variable.denoter, instructions: mips.clear() };
-      } else if (variable.isLocal) {
-        var reg = temp.$t();
-        mips.comment(reg + ' = addressOf (local:' + $1 + ')');
-        mips.li(reg, (-1 * variable.offset) - 4);
-        mips.add(reg, $fp, reg);
-        $$ = { register: reg, symbol: $1, denoter: variable.denoter, instructions: mips.clear() };
-      } else if (variable.isInstance) {
-        // handle instance vars
-        var reg = temp.$t();
-        mips.comment(reg + ' = addressOf (instance:' + $1 + ')');
-        mips.li(reg, variable.offset);
-        mips.add(reg, $s0, reg);
-        $$ = { register: reg, symbol: $1, denoter: variable.denoter, instructions: mips.clear() };
+        inst.register = $v0;
+
+      } else {
+
+        var reg = temp.$t(inst);
+        inst.register = reg;
+
+        if (variable.isParam && variable.isValue) {
+          inst
+            .comment(reg + ' = addressOf (param:' + $1 + ')')
+            .li(reg, 8 + variable.offset)
+            .add(reg, reg, $fp)
+            ;
+        } else if (variable.isParam && variable.isReference) {
+          inst
+            .comment(reg + ' = &addressOf (param:' + $1 + ')')
+            .li(reg, 8 + variable.offset)
+            .add(reg, reg, $fp)
+            .lw(reg, reg)
+            ;
+        } else if (variable.isLocal) {
+          inst
+            .comment(reg + ' = addressOf (local:' + $1 + ')')
+            .li(reg, (-1 * variable.offset) - 4)
+            .add(reg, $fp, reg)
+            ;
+        } else if (variable.isInstance) {
+          // handle instance vars
+          inst
+            .comment(reg + ' = addressOf (instance:' + $1 + ')')
+            .li(reg, variable.offset)
+            .add(reg, $s0, reg)
+            ;
+        }
       }
     }
+
+    $$ = inst;
   }
 | indexed_variable { }
 | attribute_designator { }
@@ -486,31 +519,38 @@ variable_access:
 indexed_variable:
   variable_access LBRAC index_expression_list RBRAC {
 
-    mips.adj($1.instructions);
-    mips.adj($3.instructions);
-
     var denoter = $1.denoter;
     var unit = denoter.unit;
     var lower = denoter.denoter.range.lower;
     var upper = denoter.denoter.range.upper;
-    var $i = temp.$t();
-    mips.comment($1.symbol + '[' + lower + '..' + upper + '] = ' + unit + ' * $i');
-    mips.li($i, unit);
+
+    var inst = mips('variable').concat($1).concat($3);
+    var $i = temp.$t(inst);
+
+    inst.symbol = $1.symbol;
+    inst.register = $1.register;
+    inst.denoter = $1.denoter.denoter.denoter;
+
+   inst 
+      .comment($1.symbol + '[' + lower + '..' + upper + '] = ' + unit + ' * $i')
+      .li($i, unit);
+      ;
+
     if (lower !== 0) {
-      mips.addi($3.register, $3.register, -1*lower);
+      inst.addi($3, $3, -1*lower);
     }
 
-    mips.mult($i, $3.register);
-    mips.mflo($i);
+    inst
+      .mult($i, $3)
+      .mflo($i)
+      .sub($1, $1, $i)
+      ;
 
-    mips.sub($1.register, $1.register, $i);
     // release registers
-    temp.release($i);
-    temp.release($3.register);
+    temp.release($i, inst);
+    temp.release($3.register, inst);
 
-    $$ = $1;
-    $$.denoter = $1.denoter.denoter.denoter;
-    $$.instructions = mips.clear();
+    $$ = inst;
   }
 ;
 
@@ -525,65 +565,75 @@ index_expression: expression { } ;
 attribute_designator:
   variable_access DOT identifier {
 
-    mips.adj($1.instructions);
-
     var variable = syms.lookup($3, $1.denoter.name);
-    mips.comment('dereferencing ' + $1.symbol + '.' + $3);
-    mips.lw($1.register, $1.register);
-    var reg = temp.$t();
-    mips.li(reg, variable.offset);
-    mips.sub($1.register, $1.register, reg);
-    temp.release(reg);
-    $$ = {
-      register: $1.register,
-      symbol: $3,
-      denoter: variable.denoter,
-      instructions: mips.clear()
-    };
+    var inst = mips('attribute');
+    var reg = temp.$t(inst);
+
+    inst.denoter = variable.denoter;
+    inst.symbol = $3;
+    inst.register = $1.register;
+
+    inst
+      .concat($1)
+      .comment('dereferencing ' + $1.symbol + '.' + $3)
+      .lw($1, $1)
+      .li(reg, variable.offset)
+      .sub($1, $1, reg)
+      ;
+
+    temp.release(reg, inst);
+
+    $$ = inst;
   }
 ;
 
 method_designator:
   variable_access DOT function_designator {
 
-    mips.adj($1.instructions);
-
     var undo = temp.regBackup();
 
-    mips.addi($sp, $sp, -4);
-    mips.sw($s0, $sp);
+    var method = syms.getMethod($3.name, $1.denoter.name);
+    var params = method.getParams();
 
-    mips.comment('setting this context for ' + $1.denoter.name);
-    mips.lw($s0, $1.register);
+    var inst = mips('method').concat(undo).concat($1);
 
-    mips.comment('allocating space for params + (' + 4 * $3.params.length + ' bytes)');
-    mips.addi($sp, $sp, -4 * $3.params.length);
+    inst.register = $s1;
+    inst.symbol = $3.name;
+    inst.denoter = method.denoter;
+
+    inst
+      .addi($sp, $sp, -4)
+      .sw($s0, $sp)
+      .comment('setting this context for ' + $1.denoter.name)
+      .lw($s0, $1)
+      .comment('allocating space for params + (' + 4 * $3.params.length + ' bytes)')
+      .addi($sp, $sp, -4 * $3.params.length);
+      ;
 
     $3.params.forEach(function (param, i) {
-      mips.adj(param.instructions);
-      mips.sw(param.register, $sp, 4*i);
+      // pop the dereference operation
+      if (params[i].isReference) {
+        param.pop();
+      }
+      inst.nest(param).sw(param, $sp, 4*i);
     });
 
-    mips.comment('making method call to ' + $3.name);
-    var method = syms.getMethod($3.name, $1.denoter.name);
-    mips.jal(method.label);
+    inst
+      .comment('making method call to ' + $3.name)
+      .jal(method.label)
+      .addi($sp, $sp, 4 * $3.params.length)
+      .lw($s0, $sp)
+      .addi($sp, $sp, 4)
+      .concat(undo.mips())
+      ;
 
-    mips.addi($sp, $sp, 4 * $3.params.length);
 
-    mips.lw($s0, $sp);
-    mips.addi($sp, $sp, 4);
+    inst
+      .comment('saving $v0 into temp var')
+      .sw($v0, $s1)
+      ;
 
-    undo();
-
-    mips.comment('saving $v0 into temp var');
-    mips.sw($v0, $s1);
-
-    $$ = {
-      register: $s1,
-      symbol: $3.name,
-      denoter: method.denoter,
-      instructions: mips.clear()
-    };
+    $$ = inst;
   }
 ;
 
@@ -599,108 +649,94 @@ actual_parameter_list:
 
 actual_parameter:
   expression {
-    temp.release($1.register);
-    $$ = {
-      register: $1.register,
-      instructions: $1.instructions
-    };
+    temp.release($1.register, $1);
   }
 | expression COLON expression { }
 | expression COLON expression COLON expression { }
 ;
 
 boolean_expression: expression {
-  mips.adj($1.instructions);
-  mips.mov($s2, $1.register);
-  $$ = {
-    type: 'boolean',
-    register: $s2,
-    instructions: mips.clear()
-  };
-  temp.release($1.register);
+
+  var inst = mips('boolean:expression').concat($1).mov($s2, $1);
+  inst.register = $s2
+  temp.release($1.register, inst);
+
+  $$ = inst;
 };
 
 expression:
-  simple_expression {
-    $$ = {
-      register: $1,
-      instructions: mips.clear()
-    };
-  }
+  simple_expression { }
 | simple_expression relop simple_expression {
+    $1.concat($3)
     switch ($2) {
       case '=':
-        mips.comment($1 + ' = ' + $3);
-        mips.seq($1, $1, $3);
+        $1.comment($1.register + ' = ' + $3.register);
+        $1.seq($1, $1, $3);
         break;
       case '<>':
-        mips.comment($1 + ' <> ' + $3);
-        mips.sne($1, $1, $3);
+        $1.comment($1.register + ' <> ' + $3.register);
+        $1.sne($1, $1, $3);
         break;
       case '<':
-        mips.comment($1 + ' < ' + $3);
-        mips.slt($1, $1, $3);
+        $1.comment($1.register + ' < ' + $3.register);
+        $1.slt($1, $1, $3);
         break;
       case '<=':
-        mips.comment($1 + ' <= ' + $3);
-        mips.sle($1, $1, $3);
+        $1.comment($1.register + ' <= ' + $3.register);
+        $1.sle($1, $1, $3);
         break;
       case '>':
-        mips.comment($1 + ' > ' + $3);
-        mips.slt($1, $3, $1);
+        $1.comment($1.register + ' > ' + $3.register);
+        $1.slt($1, $3, $1);
         break;
       case '>=':
-        mips.comment($1 + ' >= ' + $3);
-        mips.sle($1, $3, $1);
+        $1.comment($1.register + ' >= ' + $3.register);
+        $1.sle($1, $3, $1);
         break;
     }
-    temp.release($3);
-    $$ = {
-      register: $1,
-      instructions: mips.clear()
-    };
+    temp.release($3.register, $1);
   }
 ;
 
 simple_expression: term
 | simple_expression addop term {
+    $1.concat($3)
     switch ($2) {
       case '+':
-        mips.add($1, $1, $3);
+        $1.add($1, $1, $3);
         break;
       case '-':
-        mips.sub($1, $1, $3);
+        $1.sub($1, $1, $3);
         break;
       case 'or':
-        mips.or($1, $1, $3);
+        $1.or($1, $1, $3);
         break;
     }
-    $$ = $1;
-    temp.release($3);
+    temp.release($3.register, $1);
   }
 ;
 
 term: factor
 | term mulop factor {
+    $1.concat($3)
     switch ($2) {
       case '*':
-        mips.mult($1, $3);
-        mips.mflo($1);
+        $1.mult($1, $3);
+        $1.mflo($1);
         break;
       case '/':
-        mips.div($1, $3);
-        mips.mflo($1);
+        $1.div($1, $3);
+        $1.mflo($1);
         break;
       case 'mod':
-        mips.div($1, $3);
-        mips.mfhi($1);
+        $1.div($1, $3);
+        $1.mfhi($1);
         break;
       case 'and':
-        mips.and($1, $1, $3);
+        $1.and($1, $1, $3);
         break;
     }
-    $$ = $1;
-    temp.release($3);
+    temp.release($3.register, $1);
   }
 ;
 
@@ -710,7 +746,7 @@ factor:
   sign factor {
     // make the numbers negative on '-'
     if ($1 == '-') {
-      mips.sub($2, $zero, $2);
+      $2.sub($2, $zero, $2);
     }
     $$ = $2;
   }
@@ -718,60 +754,62 @@ factor:
 
 primary:
   variable_access {
-
-    mips.adj($1.instructions);
-
+    var inst = mips('primary:variable').concat($1);
     if ($1.register === $s1) {
-      var reg = temp.$t();
-      mips.lw(reg, $1.register);
-      $$ = reg;
+      var reg = temp.$t(inst);
+      inst.lw(reg, $1.register);
+      inst.register = reg;
     } else {
-      mips.lw($1.register, $1.register);
-      $$ = $1.register;
+      inst.lw($1.register, $1.register);
+      inst.register = $1.register;
     }
+    $$ = inst;
   }
 | unsigned_constant {
-    var reg = temp.$t();
-    mips.li(reg, $1);
-    $$ = reg;
+    var inst = mips('primary:constant');
+    var reg = temp.$t(inst);
+    inst.li(reg, $1);
+    inst.register = reg;
+
+    $$ = inst;
   }
-| LPAREN expression RPAREN {
-    mips.adj($2.instructions);
-    $$ = $2.register;
-  }
+| LPAREN expression RPAREN { $$ = $2; }
 | function_designator {
 
     var method = syms.getMethod($1.name);
-
-    var undo = temp.regBackup();
-
-    mips.comment('allocating params + (' + 4 * $1.params.length + ' bytes)');
-    mips.addi($sp, $sp, -4 * $1.params.length);
-
-
     var params = method.getParams();
+    var undo = temp.regBackup();
+    var inst = mips('primary:function').concat(undo);
+
+    inst
+      .comment('allocating params + (' + 4 * $1.params.length + ' bytes)')
+      .addi($sp, $sp, -4 * $1.params.length)
+      ;
 
     $1.params.forEach(function (param, i) {
+      // pop the dereference operation
       if (params[i].isReference) {
-        // pop the dereference operation
-        param.instructions.pop();
+        param.pop();
       }
-      mips.comment('loading param: ' + $1.name + '[' + i + ']');
-      mips.nest(param.instructions);
-      mips.sw(param.register, $sp, 4*i);
+      inst
+        .comment('loading param: ' + $1.name + '[' + i + ']')
+        .nest(param).sw(param, $sp, 4*i);
     });
 
     // make call
-    mips.comment('making function call to ' + $1.name);
-    mips.jal(method.label);
+    inst
+      .comment('making function call to ' + $1.name)
+      .jal(method.label)
+      .addi($sp, $sp, 4 * $1.params.length)
+      .concat(undo.mips())
+      ;
 
-    mips.addi($sp, $sp, 4 * $1.params.length);
+    var reg = temp.$t(inst);
+    inst.mov(reg, $v0);
 
-    undo();
+    inst.register = reg;
 
-    var reg = temp.$t();
-    mips.mov(reg, $v0);
-    $$ = reg;
+    $$ = inst;
   }
 | NOT primary {
   }

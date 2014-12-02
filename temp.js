@@ -16,7 +16,7 @@ var $zero = '$0'
 
 var regCount = 0;
 // get next temporary register available
-exports.$t = function () {
+exports.$t = function (mips) {
   if (regCount < 10) {
     return '$t' + regCount++;
   } else {
@@ -29,35 +29,48 @@ exports.$t = function () {
 
 // backup registers to stack
 exports.regBackup = function () {
+
+  var inst = mips('backup');
+
   // allocate space on the stack (+1 for $ra)
   if (regCount > 0) {
-    mips.comment('backing up registers to the stack')
-    mips.addi($sp, $sp, -4 * regCount);
+    inst
+      .comment('backing up registers to the stack')
+      .addi($sp, $sp, -4 * regCount)
+      ;
     // backup temps
     for (var i = 0; i < regCount; i++) {
-      mips.sw('$t'+i, $sp, i*4);
+      inst.sw('$t'+i, $sp, i*4);
     }
     regCount = 0;
   }
 
   // unload stack back into registers
-  return function () {
+  inst.mips = function () {
+    
+    var undo = mips('undo');
 
     if (i > 0) {
       regCount = i;
-      mips.comment('restoring registers from the stack')
+      undo
+        .comment('restoring registers from the stack')
       i--;
       for (; i >= 0; i--) {
-        mips.lw('$t'+i, $sp, i*4);
+        undo.lw('$t'+i, $sp, i*4);
       }
-      mips.addi($sp, $sp, 4 * regCount);
+      undo.addi($sp, $sp, 4 * regCount);
     }
+
+    return undo;
+
   };
+
+  return inst;
 };
 
 // release register
-exports.release = function (reg) {
-  if (reg.match(/^\$t\d$/)) {
+exports.release = function (reg, mips) {
+  if (reg && reg.match(/^\$t\d$/)) {
     if (regCount < 9) {
       regCount--;
     } else {

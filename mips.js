@@ -1,141 +1,156 @@
 // Arithmetic and Logical Instructions
 
-// buffer for statements
-var buffer = [];
-
-var add = function (inst) {
-  buffer.push(inst);
-};
-
-// clear the buffer and get all the buffered instructions
-exports.clear = function () {
-  var temp = buffer;
-  buffer = [];
-  return temp;
-};
-
-var arith = function (inst) {
-  return function ($d, $s, $t) {
-    if ($t === undefined) {
-      add(inst + ' ' + $d + ', ' + $s);
-    } else {
-      add(inst + ' ' + $d + ', ' + $s + ', ' + $t);
-    }
-  };
-};
-
-exports.add = arith('add');   // $d = $s + $t
-exports.addi = arith('addi'); // $t = $s + SE(i)
-exports.and = arith('and');   // $d = $s & $t
-exports.or = arith('or');     // $d = $s | $t
-exports.div = arith('div');   // lo = $s / $t; hi = $s % $t
-exports.mult = arith('mult'); // hi:lo = $s * $t
-exports.sub = arith('sub');   // $d = $s - $t
-// subi works in mars, but not spim
-exports.subi = arith('subi'); // $d = $s - SE(i)
-
-// Comparison Instructions
-var comp = function (inst) {
-  return function ($d, $s, $t) {
-    add(inst + ' ' + $d + ', ' + $s + ', ' + $t);
-  };
-};
-
-// set equal to
-exports.seq = comp('seq');
-exports.slt = comp('slt');
-exports.sle = comp('sle');
-exports.sne = comp('sne');
-
-
-// Store Instructions
-exports.sw = function ($t, $s, i) {
-  if (i === undefined) {
-    i = 0;
-  }
-  add('sw ' + $t + ', ' + i + '(' + $s + ')'); // MEM [$s + i]:4 = $t
-};
-
-exports.lw = function ($t, $s, i) {
-  if (i === undefined) {
-    i = 0;
-  }
-  add('lw ' + $t + ', ' + i + '(' + $s + ')'); // MEM [$s + i]:4 = $t
-};
-
-// Data Movement Instructions
-
-exports.mov = function ($d, $s) {
-  exports.addi($d, $s, '0');
-};
-
-exports.li = function ($d, c) {
-  add('li ' + $d + ', ' + c);
-}
-
-exports.mfhi = function ($d) { // $d = hi
-  add('mfhi ' + $d);
-};
-
-exports.mflo = function ($d) { // $d = lo
-  add('mflo ' + $d);
-};
-
-// Misc
-
-exports.label = function (text) {
-  add(text + ':')
-}
-
-exports.comment = function (text) {
-  add('nop # ' + text);
-};
-
-exports.syscall = function () {
-  add('syscall');
-};
-
-
-// Branch Instructions
-
-// if ($s == $t) branch to label
-exports.beq = function ($s, $t, label) {
-  add('beq ' + $s + ', ' + $t + ', ' + label);
-};
-
-// Jump Instructions
-
-exports.j = function (label) {
-  add('j ' + label);
-};
-
-exports.jal = function (label) {
-  add('jal ' + label);
-};
-
-exports.jr = function () {
-  add('jr $ra');
-};
-
-exports.nest = function (instructions) {
-  if (instructions !== undefined) {
-    buffer = buffer.concat('', instructions.map(function (instruction) {
-      return '    ' + instruction;
-    }), '');
-  }
-};
-
-exports.adj = function (instructions) {
-  if (instructions !== undefined) {
-    buffer = buffer.concat(instructions.map(function (instruction) {
-      return instruction;
-    }));
-  }
-};
-
-
-// label generators
 var whileCount = 0;
 var ifCount = 0;
-exports.$wh = function () { return 'while_' + whileCount++; };
-exports.$if = function () { return 'if_' + ifCount++; };
+
+module.exports = function (type) {
+
+  var buff = [];
+
+  var add = function (inst) { buff.push(inst); };
+
+  var parseArgs = function (fun) {
+    return function () {
+      var args = Array.prototype.map.call(arguments, (function (arg) {
+        if (arg.register !== undefined) {
+          return arg.register;
+        } else {
+          return arg;
+        }
+      }));
+      fun.apply(null, args);
+    }
+  };
+
+  var arith = function (inst) {
+    return parseArgs(function ($d, $s, $t) {
+      if ($t === undefined) {
+        add(inst + ' ' + $d + ', ' + $s);
+      } else {
+        add(inst + ' ' + $d + ', ' + $s + ', ' + $t);
+      }
+    });
+  };
+
+  var comp = function (inst) {
+    return parseArgs(function ($d, $s, $t) {
+      add(inst + ' ' + $d + ', ' + $s + ', ' + $t);
+    });
+  };
+
+  var store = function(inst) {
+    return parseArgs(function ($t, $s, i) {
+      if (i === undefined) i = 0;
+      add(inst + ' ' + $t + ', ' + i + '(' + $s + ')');
+    });
+  };
+
+  var methods = {
+
+    // arithmetic instructions
+    add:  arith('add'),   // $d = $s + $t
+    addi: arith('addi'),  // $t = $s + SE(i)
+    and:  arith('and'),   // $d = $s & $t
+    or:   arith('or'),    // $d = $s | $t
+    div:  arith('div'),   // lo = $s / $t; hi = $s % $t
+    mult: arith('mult'),  // hi:lo = $s * $t
+    sub:  arith('sub'),   // $d = $s - $t
+
+    // comparison instructions
+    seq: comp('seq'),
+    slt: comp('slt'),
+    sle: comp('sle'),
+    sne: comp('sne'),
+
+    // store Instructions
+    sw: store('sw'), // MEM [$s + i]:4 = $t
+    lw: store('lw'), // MEM [$s + i]:4 = $t
+
+    // branch instructions
+    // if ($s == $t) branch to label
+    beq: parseArgs(function ($s, $t, label) {
+      add('beq ' + $s + ', ' + $t + ', ' + label); }),
+
+    // data movement instructions
+    mov: parseArgs(function ($d, $s) {
+      add('add ' + $d +  ', ' + $s + ', $0'); }),
+
+    li: parseArgs(function ($d, c) {
+      add('li ' + $d + ', ' + c); }),
+
+     // $d = hi
+    mfhi: parseArgs(function ($d) { add('mfhi ' + $d); }),
+    // $d = lo
+    mflo: parseArgs(function ($d) { add('mflo ' + $d); }),
+
+    // jump Instructions
+    j: function (label) { add('j ' + label); },
+    jal: function (label) { add('jal ' + label); },
+    jr: function () { add('jr $ra'); },
+
+    // misc
+    label: function (text) { add(text + ':') },
+    comment: function (text) { add('nop # ' + text); },
+    syscall: function () { add('syscall'); },
+
+    nest: function (mips) {
+      if (mips !== undefined && mips.getInstructions !== undefined) {
+        buff = buff.concat('',
+          mips.getInstructions().map(function (instruction) {
+            return '    ' + instruction;
+          }), ''
+        );
+      } else {
+        buff = buff.concat(mips);
+      }
+    },
+
+    concat: function (mips) {
+      if (mips !== undefined) {
+        buff = buff.concat(mips.getInstructions());
+      }
+    },
+
+    // pop last instruction (messy hack but it works)
+    pop: function () { buff.pop() }
+
+  };
+
+  // make all methods chain-able
+
+  var chain = function (fun) {
+    return function () {
+      fun.apply(null, arguments);
+      return methods;
+    };
+  };
+
+  Object.keys(methods).forEach(function (key) {
+    methods[key] = chain(methods[key]);
+  });
+
+  // non-chain-able methods
+
+  // label generators
+  methods.$wh = function () { return 'while_' + whileCount++; };
+  methods.$if = function () { return 'if_' + ifCount++; };
+
+  methods.getInstructions =  function () { return buff; };
+  methods.join = function () { return buff; };
+
+  methods.print = function () { 
+    console.log('\n' + buff.join('\n') + '\n');
+  };
+
+  methods.bug = function () {
+    process.stderr.write(JSON.stringify({
+      meta: methods,
+      inst: buff
+    }, null, 2) + '\n');
+  };
+
+  methods.type = type;
+
+  return methods;
+
+};
