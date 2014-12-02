@@ -861,6 +861,8 @@ primary:
     $$ = inst;
   }
 | NOT primary {
+    $2.not($2, $2);
+    $$ = $2;
   }
 ;
 

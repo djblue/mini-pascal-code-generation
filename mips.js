@@ -52,6 +52,7 @@ module.exports = function (type) {
     addi: arith('addi'),  // $t = $s + SE(i)
     and:  arith('and'),   // $d = $s & $t
     or:   arith('or'),    // $d = $s | $t
+    not:  arith('not'),    // $d = !$s
     div:  arith('div'),   // lo = $s / $t; hi = $s % $t
     mult: arith('mult'),  // hi:lo = $s * $t
     sub:  arith('sub'),   // $d = $s - $t
