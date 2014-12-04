@@ -4,7 +4,7 @@
   "description": "A mini-pascal code generator.",
   "scripts": {
     "install": "jison pascal.y",
-    "test": "./runner.sh"
+    "test": "./runner.sh && ./runner.sh -d travistests"
   },
   "main": "pascal.js",
   "directories": {

@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # options
-# -f show only fails
-# -p show only pass
+# -f show only fails # -p show only pass
 # -v show diff (verbose)
 # -g <pattern> only run tests that match pattern
 # -s show source for errors
 # -m always show make output
+# -d specify test directory (default is tests)
 
 # colors
 green () { echo -e "\033[0;32m$1\033[0;0m"; }
@@ -22,9 +22,13 @@ showerrors=0
 showsource=0
 showmake=0
 grepstr=''
+dieonefail=0
+
+TESTDIR='tests'
+TIMEOUT=1s
 
 # parse flags
-while getopts fpvsmg: opt; do
+while getopts fpvsmg:d:tl opt; do
   case "$opt" in
     f) showpass=0 ;;
     p) showfail=0 ;;
@@ -32,6 +36,9 @@ while getopts fpvsmg: opt; do
     s) showsource=1 ;;
     m) showmake=1 ;;
     g) grepstr=$OPTARG ;;
+    d) TESTDIR=$OPTARG ;;
+    t) TIMEOUT=$OPTARGS ;;
+    l) dieonefail=1 ;;
   esac
 done
 
@@ -46,10 +53,10 @@ fi
 
 TEMP_FILE=temp.mips
 
-for f in $(ls ./tests/*.p | grep "$grepstr"); do
+for f in $(ls $TESTDIR/*.p | grep "$grepstr"); do
   node pascal.js $f > $TEMP_FILE
   # tail to get rid of annoying header
-  output=$(spim -file $TEMP_FILE | tail -n +6 | diff --context $f.out -)
+  output=$(timeout $TIMEOUT spim -file $TEMP_FILE 2> /dev/null | tail -n +6 | diff --context $f.out -)
 
   if [ $? == 0 ]; then
     pass=$((pass+1))
@@ -68,6 +75,10 @@ for f in $(ls ./tests/*.p | grep "$grepstr"); do
         cat -n "$f"
       fi
     fi
+    if [ "$dieonefail" == "1" ]; then
+      exit 1
+    fi
+
   fi
 
   if [ -f $f.js ]; then
